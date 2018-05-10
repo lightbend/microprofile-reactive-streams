@@ -9,11 +9,7 @@
  * work. If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.     *
  ******************************************************************************/
 
-plugins {
-    id 'java-library'
-}
-
 dependencies {
-    api libraries.microprofile_reactive_streams_api
+    compile libraries.microprofile_reactive_streams_api
     testCompile libraries.microprofile_reactive_streams_tck
 }

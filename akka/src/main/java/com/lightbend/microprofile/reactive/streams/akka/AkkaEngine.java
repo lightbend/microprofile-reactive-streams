@@ -48,7 +48,7 @@ public class AkkaEngine implements ReactiveStreamsEngine {
     // Optimization - if it's just a publisher, return it directly
     Stage firstStage = graph.getStages().iterator().next();
     if (graph.getStages().size() == 1 && firstStage instanceof Stage.PublisherStage) {
-      return (Publisher) ((Stage.PublisherStage) firstStage).getPublisher();
+      return (Publisher) ((Stage.PublisherStage) firstStage).getRsPublisher();
     }
 
     return materialize(this.<T>buildSource(graph)
@@ -92,7 +92,7 @@ public class AkkaEngine implements ReactiveStreamsEngine {
       // Optimization - if it's just a processor, return it directly
       Stage firstStage = graph.getStages().iterator().next();
       if (graph.getStages().size() == 1 && firstStage instanceof Stage.ProcessorStage) {
-        return (Processor) ((Stage.ProcessorStage) firstStage).getProcessor();
+        return (Processor) ((Stage.ProcessorStage) firstStage).getRsProcessor();
       }
     }
 
@@ -141,7 +141,7 @@ public class AkkaEngine implements ReactiveStreamsEngine {
       Function<Object, Iterable<Object>> mapper = (Function) ((Stage.FlatMapIterable) stage).getMapper();
       return flow.mapConcat(mapper::apply);
     } else if (stage instanceof Stage.ProcessorStage) {
-      Processor<Object, Object> processor = (Processor) (((Stage.ProcessorStage) stage).getProcessor());
+      Processor<Object, Object> processor = (Processor) (((Stage.ProcessorStage) stage).getRsProcessor());
       Flow processorFlow;
       try {
         processorFlow = Flow.fromProcessor(() -> processor);
@@ -189,7 +189,7 @@ public class AkkaEngine implements ReactiveStreamsEngine {
     } else if (stage instanceof Stage.SubscriberStage) {
       return Flow.create()
           .viaMat(new TerminationWatcher(), Keep.right())
-          .to((Sink) Sink.fromSubscriber(((Stage.SubscriberStage) stage).getSubscriber()));
+          .to((Sink) Sink.fromSubscriber(((Stage.SubscriberStage) stage).getRsSubscriber()));
     } else if (stage == Stage.Cancel.INSTANCE) {
       return Sink.cancelled().mapMaterializedValue(n -> CompletableFuture.completedFuture(null));
     } else if (stage.hasInlet() && !stage.hasOutlet()) {
@@ -213,7 +213,7 @@ public class AkkaEngine implements ReactiveStreamsEngine {
       }
       return Source.from(elements);
     } else if (stage instanceof Stage.PublisherStage) {
-      return Source.fromPublisher(((Stage.PublisherStage) stage).getPublisher());
+      return Source.fromPublisher(((Stage.PublisherStage) stage).getRsPublisher());
     } else if (stage instanceof Stage.Concat) {
       Graph first = ((Stage.Concat) stage).getFirst();
       Graph second = ((Stage.Concat) stage).getSecond();

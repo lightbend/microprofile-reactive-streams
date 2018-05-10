@@ -15,6 +15,9 @@ import akka.actor.ActorSystem;
 import akka.actor.BootstrapSetup;
 import akka.stream.ActorMaterializer;
 import akka.stream.Materializer;
+import com.google.common.base.FinalizablePhantomReference;
+import com.google.common.base.FinalizableReferenceQueue;
+import com.google.common.collect.Sets;
 import com.typesafe.config.ConfigFactory;
 import org.eclipse.microprofile.reactive.streams.SubscriberWithResult;
 import org.eclipse.microprofile.reactive.streams.spi.Graph;
@@ -24,8 +27,9 @@ import org.reactivestreams.Processor;
 import org.reactivestreams.Publisher;
 import scala.compat.java8.FutureConverters;
 
-import java.lang.ref.Cleaner;
+import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
+import java.util.Set;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ForkJoinPool;
 
@@ -41,16 +45,8 @@ import java.util.concurrent.ForkJoinPool;
  */
 public class AkkaEngineProvider implements ReactiveStreamsEngine {
 
-  /**
-   * Used to clean up the actor system when the engine is no longer strongly referenceable.
-   */
-  private static final Cleaner actorSystemCleaner = Cleaner.create(runnable -> {
-    Thread thread = new Thread(runnable);
-    // The default thread factory used by the cleaner sets the thread priority to this.
-    thread.setPriority(Thread.MAX_PRIORITY - 2);
-    thread.setName("Akka-Reactive-Streams-Engine-Cleaner");
-    return thread;
-  });
+  private static final FinalizableReferenceQueue frq = new FinalizableReferenceQueue();
+  private static final Set<Reference<?>> references = Sets.newConcurrentHashSet();
 
   private static volatile WeakReference<AkkaEngine> cachedEngine = null;
 
@@ -58,24 +54,6 @@ public class AkkaEngineProvider implements ReactiveStreamsEngine {
    * Used to ensure only one instance of the engine exists at a time.
    */
   private static final Object mutex = new Object();
-
-  /**
-   * Using a static class rather than a lambda as advised by the Cleaner javadocs to ensure that we don't accidentally
-   * close over a reference to the AkkaEngine.
-   */
-  private static class ActorSystemCleanerTask implements Runnable {
-    private final ActorSystem system;
-
-    private ActorSystemCleanerTask(ActorSystem system) {
-      this.system = system;
-    }
-
-    @Override
-    public void run() {
-      system.terminate();
-      // Let it terminate asynchronously, blocking while it does won't achieve anything.
-    }
-  }
 
   private static AkkaEngine createEngine() {
     ActorSystem system = ActorSystem.create("reactive-streams-engine",
@@ -91,7 +69,7 @@ public class AkkaEngineProvider implements ReactiveStreamsEngine {
     Materializer materializer = ActorMaterializer.create(system);
 
     AkkaEngine engine = new AkkaEngine(materializer);
-    actorSystemCleaner.register(engine, new ActorSystemCleanerTask(system));
+    references.add(new AkkaEngineFinalizablePhantomReference(engine, system));
     return engine;
   }
 
@@ -155,5 +133,23 @@ public class AkkaEngineProvider implements ReactiveStreamsEngine {
   @Override
   public <T> CompletionStage<T> buildCompletion(Graph graph) throws UnsupportedStageException {
     return delegate.buildCompletion(graph);
+  }
+
+  /**
+   * This is a static class to ensure we don't close over any state that might keep the engine alive.
+   */
+  private static class AkkaEngineFinalizablePhantomReference extends FinalizablePhantomReference<AkkaEngine> {
+    private final ActorSystem system;
+
+    private AkkaEngineFinalizablePhantomReference(AkkaEngine engine, ActorSystem system) {
+      super(engine, AkkaEngineProvider.frq);
+      this.system = system;
+    }
+
+    @Override
+    public void finalizeReferent() {
+      references.remove(this);
+      system.terminate();
+    }
   }
 }

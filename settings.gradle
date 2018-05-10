@@ -11,6 +11,11 @@
 
 rootProject.name = 'lightbend-microprofile-reactive-streams'
 
-include 'zerodep'
-include 'akka'
-include 'rxjava'
+include 'microprofile-reactive-streams-zerodep'
+project(':microprofile-reactive-streams-zerodep').projectDir = file 'zerodep'
+
+include 'microprofile-reactive-streams-akka'
+project(':microprofile-reactive-streams-akka').projectDir = file 'akka'
+
+include 'microprofile-reactive-streams-rxjava'
+project(':microprofile-reactive-streams-rxjava').projectDir = file 'rxjava'

@@ -67,7 +67,7 @@ final class MutexExecutor implements Executor {
       run(current);
       if ((next = current.get()) == null) { // try advance, if we get null test
         if (last.compareAndSet(current, null)) return; // end-of-queue: we're done.
-        else while((next = current.get()) == null) Thread.onSpinWait(); // try advance until next is visible.
+        else while((next = current.get()) == null)/* Thread.onSpinWait() */; // try advance until next is visible.
       }
     }
   }

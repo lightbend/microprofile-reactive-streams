@@ -23,7 +23,7 @@ import org.reactivestreams.Publisher;
 import scala.compat.java8.FutureConverters;
 import scala.concurrent.duration.Duration;
 
-import java.util.List;
+import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -35,9 +35,9 @@ public class AkkaEngineProviderTest {
   @Test
   public void akkaEngineProviderIsProvided() throws Exception {
     assertEquals(
-        ReactiveStreams.of(1).toList().build()
+        ReactiveStreams.of(1).toList().run()
             .toCompletableFuture().get(1, TimeUnit.SECONDS),
-        List.of(1));
+        Collections.singletonList(1));
   }
 
   @Test
@@ -74,7 +74,7 @@ public class AkkaEngineProviderTest {
       if (error.get() != null) {
         throw error.get();
       }
-    }).build(engine);
+    }).run(engine);
     publisher = null;
 
     engine = null;

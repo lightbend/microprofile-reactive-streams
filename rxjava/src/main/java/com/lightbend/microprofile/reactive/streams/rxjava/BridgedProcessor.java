@@ -44,36 +44,35 @@ class BridgedProcessor<T> implements Processor<T, T> {
       subscriber.onSubscribe(new NullSubsription());
       subscriber.onError(new IllegalStateException("BridgedPublisher only supports one subscriber."));
     } else {
-      switch (state.compareAndExchange(State.INACTIVE, State.HAS_SUBSCRIBER)) {
-        case INACTIVE:
-          break;
+      if (!state.compareAndSet(State.INACTIVE, State.HAS_SUBSCRIBER)) {
+        switch (state.get()) {
+          case HAS_SUBSCRIPTION:
+            subscriber.onSubscribe(new WrappedSubscription(subscription.get()));
+            if (!state.compareAndSet(State.HAS_SUBSCRIPTION, State.RUNNING)) {
+              switch (state.get()) {
+                // In the time that we've subscribed, we may have received an error or complete
+                // signal
+                case HAS_ERROR:
+                  subscriber.onError(throwable);
+                  break;
+                case COMPLETE:
+                  subscriber.onComplete();
+                  break;
+                }
+            }
+            break;
 
-        case HAS_SUBSCRIPTION:
-          subscriber.onSubscribe(new WrappedSubscription(subscription.get()));
-          switch (state.compareAndExchange(State.HAS_SUBSCRIPTION, State.RUNNING)) {
-            case HAS_SUBSCRIPTION:
-              break;
-            // In the time that we've subscribed, we may have received an error or complete
-            // signal
-            case HAS_ERROR:
-              subscriber.onError(throwable);
-              break;
-            case COMPLETE:
-              subscriber.onComplete();
-              break;
-          }
-          break;
+          case HAS_ERROR:
+            subscriber.onSubscribe(new NullSubsription());
+            subscriber.onError(throwable);
+            break;
 
-        case HAS_ERROR:
-          subscriber.onSubscribe(new NullSubsription());
-          subscriber.onError(throwable);
-          break;
+          case COMPLETE:
+            subscriber.onSubscribe(new NullSubsription());
+            subscriber.onComplete();
+            break;
 
-        case COMPLETE:
-          subscriber.onSubscribe(new NullSubsription());
-          subscriber.onComplete();
-          break;
-
+        }
       }
     }
   }
@@ -84,13 +83,9 @@ class BridgedProcessor<T> implements Processor<T, T> {
     if (!this.subscription.compareAndSet(null, subscription)) {
       subscription.cancel();
     } else {
-      switch (state.compareAndExchange(State.INACTIVE, State.HAS_SUBSCRIPTION)) {
-        case INACTIVE:
-          break;
-        case HAS_SUBSCRIBER:
-          state.set(State.RUNNING);
-          subscriber.get().onSubscribe(new WrappedSubscription(subscription));
-          break;
+      if (!state.compareAndSet(State.INACTIVE, State.HAS_SUBSCRIPTION)) {
+        state.set(State.RUNNING);
+        subscriber.get().onSubscribe(new WrappedSubscription(subscription));
       }
     }
   }
@@ -113,34 +108,34 @@ class BridgedProcessor<T> implements Processor<T, T> {
     Objects.requireNonNull(throwable, "Throwable passed to onError must not be null");
     // We can't just go straight to the subscriber, because we can't be sure that onSubscribe has been invoked yet
     this.throwable = throwable;
-    switch (state.compareAndExchange(State.HAS_SUBSCRIPTION, State.HAS_ERROR)) {
-      case RUNNING:
-        subscriber.get().onError(throwable);
-        break;
-      case HAS_SUBSCRIPTION:
-        break;
-      case HAS_ERROR:
-      case COMPLETE:
-        throw new IllegalStateException("onError invoked after completion.");
-      case INACTIVE:
-        throw new IllegalStateException("onError invoked before onSubscribe.");
+    if (!state.compareAndSet(State.HAS_SUBSCRIPTION, State.HAS_ERROR)) {
+      switch (state.get()) {
+        case RUNNING:
+          subscriber.get().onError(throwable);
+          break;
+        case HAS_ERROR:
+        case COMPLETE:
+          throw new IllegalStateException("onError invoked after completion.");
+        case INACTIVE:
+          throw new IllegalStateException("onError invoked before onSubscribe.");
+      }
     }
   }
 
   @Override
   public void onComplete() {
     // We can't just go straight to the subscriber, because we can't be sure that onSubscribe has been invoked yet
-    switch (state.compareAndExchange(State.HAS_SUBSCRIPTION, State.COMPLETE)) {
-      case RUNNING:
-        subscriber.get().onComplete();
-        break;
-      case HAS_SUBSCRIPTION:
-        break;
-      case HAS_ERROR:
-      case COMPLETE:
-        throw new IllegalStateException("onComplete invoked after completion.");
-      case INACTIVE:
-        throw new IllegalStateException("onComplete invoked before onSubscribe.");
+    if (!state.compareAndSet(State.HAS_SUBSCRIPTION, State.COMPLETE)) {
+      switch (state.get()) {
+        case RUNNING:
+          subscriber.get().onComplete();
+          break;
+        case HAS_ERROR:
+        case COMPLETE:
+          throw new IllegalStateException("onComplete invoked after completion.");
+        case INACTIVE:
+          throw new IllegalStateException("onComplete invoked before onSubscribe.");
+      }
     }
   }
 

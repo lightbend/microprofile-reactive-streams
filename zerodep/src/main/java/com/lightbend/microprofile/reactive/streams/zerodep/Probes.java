@@ -11,8 +11,11 @@
 
 package com.lightbend.microprofile.reactive.streams.zerodep;
 
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
+
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.Flow.*;
 
 public class Probes {
 

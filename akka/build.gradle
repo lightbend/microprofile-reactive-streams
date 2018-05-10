@@ -9,13 +9,10 @@
  * work. If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.     *
  ******************************************************************************/
 
-plugins {
-    id 'java-library'
-}
-
 dependencies {
-    api libraries.microprofile_reactive_streams_api
-    implementation "com.typesafe.akka:akka-stream_2.12:2.5.12"
+    compile libraries.microprofile_reactive_streams_api
+    compile "com.typesafe.akka:akka-stream_2.12:2.5.12"
+    compile "com.google.guava:guava:25.0-jre"
 
     testCompile libraries.microprofile_reactive_streams_tck
 }

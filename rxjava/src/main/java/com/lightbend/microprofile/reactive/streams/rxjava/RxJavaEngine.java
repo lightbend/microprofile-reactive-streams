@@ -120,7 +120,7 @@ public class RxJavaEngine implements ReactiveStreamsEngine {
       Function<Object, Iterable<Object>> mapper = (Function) ((Stage.FlatMapIterable) stage).getMapper();
       return flowable.concatMapIterable(mapper::apply);
     } else if (stage instanceof Stage.ProcessorStage) {
-      Processor<Object, Object> processor = (Processor) (((Stage.ProcessorStage) stage).getProcessor());
+      Processor<Object, Object> processor = (Processor) (((Stage.ProcessorStage) stage).getRsProcessor());
       flowable.subscribe(processor);
       return Flowable.fromPublisher(processor);
     } else if (stage.hasInlet() && stage.hasOutlet()) {
@@ -150,7 +150,7 @@ public class RxJavaEngine implements ReactiveStreamsEngine {
       flowable.subscribe().dispose();
       return CompletableFuture.completedFuture(null);
     } if (stage instanceof Stage.SubscriberStage) {
-      Subscriber subscriber = ((Stage.SubscriberStage) stage).getSubscriber();
+      Subscriber subscriber = ((Stage.SubscriberStage) stage).getRsSubscriber();
       TerminationWatchingSubscriber watchTermination = new TerminationWatchingSubscriber(subscriber);
       flowable.subscribe(watchTermination);
       return watchTermination.getTermination();
@@ -165,7 +165,7 @@ public class RxJavaEngine implements ReactiveStreamsEngine {
     if (stage instanceof Stage.Of) {
       return Flowable.fromIterable(((Stage.Of) stage).getElements());
     } else if (stage instanceof Stage.PublisherStage) {
-      return Flowable.fromPublisher(((Stage.PublisherStage) stage).getPublisher());
+      return Flowable.fromPublisher(((Stage.PublisherStage) stage).getRsPublisher());
     } else if (stage instanceof Stage.Concat) {
       Graph first = ((Stage.Concat) stage).getFirst();
       Graph second = ((Stage.Concat) stage).getSecond();

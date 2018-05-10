@@ -9,14 +9,10 @@
  * work. If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.     *
  ******************************************************************************/
 
-plugins {
-    id 'java-library'
-}
-
 dependencies {
-    api libraries.microprofile_reactive_streams_api
-    implementation "io.reactivex.rxjava2:rxjava:2.1.9"
-    implementation "com.github.akarnokd:rxjava2-jdk8-interop:0.2.9"
+    compile libraries.microprofile_reactive_streams_api
+    compile "io.reactivex.rxjava2:rxjava:2.1.9"
+    compile "com.github.akarnokd:rxjava2-jdk8-interop:0.2.9"
 
     testCompile libraries.microprofile_reactive_streams_tck
 }

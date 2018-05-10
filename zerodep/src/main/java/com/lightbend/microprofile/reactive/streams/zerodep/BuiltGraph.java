@@ -34,7 +34,7 @@ import java.util.function.Predicate;
  * <p>
  * Each stage in the graph is provided with {@link StageInlet}'s and {@link StageOutlet}'s to any inlets and outlets it
  * may have. Stages that feed into each other will be joined by a {@link StageOutletInlet}. On
- * {@link java.util.concurrent.Flow.Publisher} and {@link java.util.concurrent.Flow.Subscriber} ends of the graph, as
+ * {@link Publisher} and {@link Subscriber} ends of the graph, as
  * well as for publisher and subscriber stages, the ports are {@link SubscriberInlet} and {@link PublisherOutlet}.
  * <p>
  * So in general, a graph is a series of stages, each separated by {@link StageOutletInlet}, and started/ended by
@@ -154,7 +154,7 @@ class BuiltGraph implements Executor {
       // Special case - an empty graph. This should result in an identity processor.
       // To build this, we use a single map stage with the identity function.
       if (graphStages.isEmpty()) {
-        graphStages = List.of(new Stage.Map(Function.identity()));
+        graphStages = Collections.singleton(new Stage.Map(Function.identity()));
       }
 
       // In the loop below, we need to compare each pair of consecutive stages, to work out what sort of inlet/outlet
@@ -189,9 +189,9 @@ class BuiltGraph implements Executor {
             // It's a subscriber, we don't create an inlet, instead we use it directly as the first subscriber
             // of this graph.
             if (stage instanceof Stage.SubscriberStage) {
-              firstSubscriber = ((Stage.SubscriberStage) stage).getSubscriber();
+              firstSubscriber = ((Stage.SubscriberStage) stage).getRsSubscriber();
             } else if (stage instanceof Stage.ProcessorStage) {
-              firstSubscriber = ((Stage.ProcessorStage) stage).getProcessor();
+              firstSubscriber = ((Stage.ProcessorStage) stage).getRsProcessor();
             }
           } else if (stage.hasInlet()) {
             // Otherwise if it has an inlet, we need to create a subscriber inlet as the first subscriber.
@@ -205,9 +205,9 @@ class BuiltGraph implements Executor {
               // We're connecting a publisher to a subscriber, don't create any port, just record what the current
               // publisher is.
               if (previousStage instanceof Stage.PublisherStage) {
-                currentPublisher = ((Stage.PublisherStage) previousStage).getPublisher();
+                currentPublisher = ((Stage.PublisherStage) previousStage).getRsPublisher();
               } else {
-                currentPublisher = ((Stage.ProcessorStage) previousStage).getProcessor();
+                currentPublisher = ((Stage.ProcessorStage) previousStage).getRsProcessor();
               }
             } else {
               // We're connecting a publisher to an inlet, create a subscriber inlet for that.
@@ -250,9 +250,9 @@ class BuiltGraph implements Executor {
             // Last stage is a publisher, and we need a publisher, no need to handle it, we just set it to be
             // the last publisher.
             if (previousStage instanceof Stage.PublisherStage) {
-              lastPublisher = ((Stage.PublisherStage) previousStage).getPublisher();
+              lastPublisher = ((Stage.PublisherStage) previousStage).getRsPublisher();
             } else {
-              lastPublisher = ((Stage.ProcessorStage) previousStage).getProcessor();
+              lastPublisher = ((Stage.ProcessorStage) previousStage).getRsProcessor();
             }
           }
         } else if (previousStage.hasOutlet()) {
@@ -380,7 +380,7 @@ class BuiltGraph implements Executor {
 
           addStage(new ConcatStage(BuiltGraph.this, firstInlet, secondInlet, outlet));
         } else if (stage instanceof Stage.PublisherStage) {
-          addStage(new ConnectorStage<>(BuiltGraph.this, ((Stage.PublisherStage) stage).getPublisher(), subscriber));
+          addStage(new ConnectorStage<>(BuiltGraph.this, ((Stage.PublisherStage) stage).getRsPublisher(), subscriber));
         } else if (stage instanceof Stage.Failed) {
           addStage(new FailedStage(BuiltGraph.this, outlet, ((Stage.Failed) stage).getError()));
         } else {
@@ -405,7 +405,7 @@ class BuiltGraph implements Executor {
         } else if (stage instanceof Stage.FlatMapIterable) {
           addStage(new FlatMapIterableStage(BuiltGraph.this, inlet, outlet, ((Stage.FlatMapIterable) stage).getMapper()));
         } else if (stage instanceof Stage.ProcessorStage) {
-          Processor processor = ((Stage.ProcessorStage) stage).getProcessor();
+          Processor processor = ((Stage.ProcessorStage) stage).getRsProcessor();
           addStage(new ConnectorStage(BuiltGraph.this, publisher, processor));
           addStage(new ConnectorStage(BuiltGraph.this, processor, subscriber));
         } else {
@@ -434,7 +434,7 @@ class BuiltGraph implements Executor {
           }
           PublisherOutlet publisherOutlet = addPort(new PublisherOutlet(BuiltGraph.this));
           addStage(new CaptureTerminationStage(BuiltGraph.this, inlet, publisherOutlet, result));
-          addStage(new ConnectorStage(BuiltGraph.this, publisherOutlet, ((Stage.SubscriberStage) stage).getSubscriber()));
+          addStage(new ConnectorStage(BuiltGraph.this, publisherOutlet, ((Stage.SubscriberStage) stage).getRsSubscriber()));
         } else {
           throw new UnsupportedStageException(stage);
         }
