@@ -17,8 +17,8 @@ buildscript {
 }
 
 ext.libraries = [
-    microprofile_reactive_streams_api: "org.eclipse.microprofile.reactive.streams:microprofile-reactive-streams-api:1.0-alpha-jroper-1",
-    microprofile_reactive_streams_tck: "org.eclipse.microprofile.reactive.streams:microprofile-reactive-streams-tck:1.0-alpha-jroper-1"
+    microprofile_reactive_streams_api: "org.eclipse.microprofile.reactive.streams:microprofile-reactive-streams-api:1.0-alpha-jroper-2",
+    microprofile_reactive_streams_tck: "org.eclipse.microprofile.reactive.streams:microprofile-reactive-streams-tck:1.0-alpha-jroper-2"
 ]
 
 allprojects {

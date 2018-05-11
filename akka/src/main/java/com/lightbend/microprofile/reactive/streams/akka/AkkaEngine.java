@@ -15,6 +15,10 @@ import akka.NotUsed;
 import akka.stream.Attributes;
 import akka.stream.Materializer;
 import akka.stream.javadsl.*;
+import org.eclipse.microprofile.reactive.streams.CompletionBuilder;
+import org.eclipse.microprofile.reactive.streams.ProcessorBuilder;
+import org.eclipse.microprofile.reactive.streams.PublisherBuilder;
+import org.eclipse.microprofile.reactive.streams.SubscriberBuilder;
 import org.eclipse.microprofile.reactive.streams.SubscriberWithResult;
 import org.eclipse.microprofile.reactive.streams.spi.Graph;
 import org.eclipse.microprofile.reactive.streams.spi.ReactiveStreamsEngine;
@@ -45,7 +49,8 @@ public class AkkaEngine implements ReactiveStreamsEngine {
 
   @Override
   public <T> Publisher<T> buildPublisher(Graph graph) throws UnsupportedStageException {
-    // Optimization - if it's just a publisher, return it directly
+    // Optimization - if it's just a pub
+    // lisher, return it directly
     Stage firstStage = graph.getStages().iterator().next();
     if (graph.getStages().size() == 1 && firstStage instanceof Stage.PublisherStage) {
       return (Publisher) ((Stage.PublisherStage) firstStage).getRsPublisher();
@@ -55,13 +60,21 @@ public class AkkaEngine implements ReactiveStreamsEngine {
         .toMat(Sink.asPublisher(AsPublisher.WITHOUT_FANOUT), Keep.right()));
   }
 
+  /**
+   * Convert a publisher builder to a source.
+   */
+  public <T> Source<T, NotUsed> buildSource(PublisherBuilder<T> publisher) throws UnsupportedStageException {
+    return buildSource(publisher.toGraph());
+  }
+
   private <T> Source<T, NotUsed> buildSource(Graph graph) throws UnsupportedStageException {
     Source source = null;
     Flow flow = Flow.create();
     for (Stage stage : graph.getStages()) {
       if (source == null) {
         source = toSource(stage);
-      } else {
+      }
+      else {
         flow = applyStage(flow, stage);
       }
     }
@@ -71,15 +84,26 @@ public class AkkaEngine implements ReactiveStreamsEngine {
 
   @Override
   public <T, R> SubscriberWithResult<T, R> buildSubscriber(Graph graph) throws UnsupportedStageException {
+    return (SubscriberWithResult) materialize(Source.asSubscriber()
+        .toMat(buildSink(graph), (subscriber, result) ->
+            new SubscriberWithResult((Subscriber) subscriber, (CompletionStage) result)));
+  }
+
+  /**
+   * Convert a subscriber builder to a sink.
+   */
+  public <T, R> Sink<T, CompletionStage<R>> buildSink(SubscriberBuilder<T, R> subscriber) throws UnsupportedStageException {
+    return buildSink(subscriber.toGraph());
+  }
+
+  private <T, R> Sink<T, CompletionStage<R>> buildSink(Graph graph) throws UnsupportedStageException {
     Flow flow = Flow.create();
     for (Stage stage : graph.getStages()) {
       if (stage.hasOutlet()) {
         flow = applyStage(flow, stage);
-      } else {
-        return (SubscriberWithResult) materialize(Source.asSubscriber()
-            .via(flow)
-            .toMat(toSink(stage), (subscriber, result) ->
-                new SubscriberWithResult((Subscriber) subscriber, (CompletionStage) result)));
+      }
+      else {
+        return flow.toMat(toSink(stage), Keep.right());
       }
     }
 
@@ -96,24 +120,48 @@ public class AkkaEngine implements ReactiveStreamsEngine {
       }
     }
 
+    return (Processor) materialize(buildFlow(graph).toProcessor());
+  }
+
+  /**
+   * Convert a processor builder to a flow.
+   */
+  public <T, R> Flow<T, R, NotUsed> buildFlow(ProcessorBuilder<T, R> processor) throws UnsupportedStageException {
+    return buildFlow(processor.toGraph());
+  }
+
+  private <T, R> Flow<T, R, NotUsed> buildFlow(Graph graph) throws UnsupportedStageException {
     Flow flow = Flow.create();
     for (Stage stage : graph.getStages()) {
       flow = applyStage(flow, stage);
     }
-    return (Processor) materialize(flow.toProcessor());
+    return flow;
   }
 
   @Override
   public <T> CompletionStage<T> buildCompletion(Graph graph) throws UnsupportedStageException {
+    return materialize(buildRunnableGraph(graph));
+  }
+
+  /**
+   * Convert a completion builder to a runnable graph.
+   */
+  public <T> RunnableGraph<CompletionStage<T>> buildCompletion(CompletionBuilder<T> completion) throws UnsupportedStageException {
+    return buildRunnableGraph(completion.toGraph());
+  }
+
+  private <T> RunnableGraph<CompletionStage<T>> buildRunnableGraph(Graph graph) throws UnsupportedStageException {
     Source source = null;
     Flow flow = Flow.create();
     for (Stage stage : graph.getStages()) {
       if (source == null) {
         source = toSource(stage);
-      } else if (stage.hasOutlet()) {
+      }
+      else if (stage.hasOutlet()) {
         flow = applyStage(flow, stage);
-      } else {
-        return (CompletionStage) materialize(source.via(flow).toMat(toSink(stage), Keep.right()));
+      }
+      else {
+        return source.via(flow).toMat(toSink(stage), Keep.right());
       }
     }
 
@@ -124,35 +172,44 @@ public class AkkaEngine implements ReactiveStreamsEngine {
     if (stage instanceof Stage.Map) {
       Function<Object, Object> mapper = (Function) ((Stage.Map) stage).getMapper();
       return flow.map(mapper::apply);
-    } else if (stage instanceof Stage.Filter) {
+    }
+    else if (stage instanceof Stage.Filter) {
       Predicate<Object> predicate = (Predicate) (((Stage.Filter) stage).getPredicate()).get();
       return flow.filter(predicate::test);
-    } else if (stage instanceof Stage.FlatMap) {
+    }
+    else if (stage instanceof Stage.FlatMap) {
       Function<Object, Graph> mapper = (Function) ((Stage.FlatMap) stage).getMapper();
       return flow.flatMapConcat(e -> buildSource(mapper.apply(e)));
-    } else if (stage instanceof Stage.TakeWhile) {
+    }
+    else if (stage instanceof Stage.TakeWhile) {
       Predicate<Object> predicate = (Predicate) (((Stage.TakeWhile) stage).getPredicate()).get();
       boolean inclusive = ((Stage.TakeWhile) stage).isInclusive();
       return flow.takeWhile(predicate::test, inclusive);
-    } else if (stage instanceof Stage.FlatMapCompletionStage) {
+    }
+    else if (stage instanceof Stage.FlatMapCompletionStage) {
       Function<Object, CompletionStage<Object>> mapper = (Function) ((Stage.FlatMapCompletionStage) stage).getMapper();
       return flow.mapAsync(1, mapper::apply);
-    } else if (stage instanceof Stage.FlatMapIterable) {
+    }
+    else if (stage instanceof Stage.FlatMapIterable) {
       Function<Object, Iterable<Object>> mapper = (Function) ((Stage.FlatMapIterable) stage).getMapper();
       return flow.mapConcat(mapper::apply);
-    } else if (stage instanceof Stage.ProcessorStage) {
+    }
+    else if (stage instanceof Stage.ProcessorStage) {
       Processor<Object, Object> processor = (Processor) (((Stage.ProcessorStage) stage).getRsProcessor());
       Flow processorFlow;
       try {
         processorFlow = Flow.fromProcessor(() -> processor);
-      } catch (Exception e) {
+      }
+      catch (Exception e) {
         // Technically can't happen, since the lambda we passed doesn't throw anything.
         throw new RuntimeException("Unexpected exception thrown", e);
       }
       return flow.via(processorFlow);
-    } else if (stage.hasInlet() && stage.hasOutlet()) {
+    }
+    else if (stage.hasInlet() && stage.hasOutlet()) {
       throw new UnsupportedStageException(stage);
-    } else {
+    }
+    else {
       throw new IllegalStateException("Got " + stage + " but needed a stage with an inlet and an outlet.");
     }
   }
@@ -160,7 +217,8 @@ public class AkkaEngine implements ReactiveStreamsEngine {
   private Sink toSink(Stage stage) {
     if (stage == Stage.FindFirst.INSTANCE) {
       return Sink.headOption();
-    } else if (stage instanceof Stage.Collect) {
+    }
+    else if (stage instanceof Stage.Collect) {
       Collector collector = ((Stage.Collect) stage).getCollector();
       BiConsumer accumulator = collector.accumulator();
       Object firstContainer = collector.supplier().get();
@@ -170,31 +228,38 @@ public class AkkaEngine implements ReactiveStreamsEngine {
       Sink<Object, CompletionStage<Object>> sink = Sink.fold(firstContainer, (resultContainer, in) -> {
         if (resultContainer == NULL) {
           accumulator.accept(null, in);
-        } else {
+        }
+        else {
           accumulator.accept(resultContainer, in);
         }
         return resultContainer;
       });
       if (collector.characteristics().contains(Collector.Characteristics.IDENTITY_FINISH) && firstContainer != NULL) {
         return sink;
-      } else {
+      }
+      else {
         return sink.mapMaterializedValue(result -> result.thenApply(r -> {
           if (r == NULL) {
             return collector.finisher().apply(null);
-          } else {
+          }
+          else {
             return collector.finisher().apply(r);
           }
         }));
       }
-    } else if (stage instanceof Stage.SubscriberStage) {
+    }
+    else if (stage instanceof Stage.SubscriberStage) {
       return Flow.create()
           .viaMat(new TerminationWatcher(), Keep.right())
           .to((Sink) Sink.fromSubscriber(((Stage.SubscriberStage) stage).getRsSubscriber()));
-    } else if (stage == Stage.Cancel.INSTANCE) {
+    }
+    else if (stage == Stage.Cancel.INSTANCE) {
       return Sink.cancelled().mapMaterializedValue(n -> CompletableFuture.completedFuture(null));
-    } else if (stage.hasInlet() && !stage.hasOutlet()) {
+    }
+    else if (stage.hasInlet() && !stage.hasOutlet()) {
       throw new UnsupportedStageException(stage);
-    } else {
+    }
+    else {
       throw new IllegalStateException("Got " + stage + " but needed a stage with an inlet and no outlet.");
     }
   }
@@ -207,22 +272,28 @@ public class AkkaEngine implements ReactiveStreamsEngine {
         int size = ((Collection) elements).size();
         if (size == 0) {
           return Source.empty();
-        } else if (size == 1) {
+        }
+        else if (size == 1) {
           return Source.single(elements.iterator().next());
         }
       }
       return Source.from(elements);
-    } else if (stage instanceof Stage.PublisherStage) {
+    }
+    else if (stage instanceof Stage.PublisherStage) {
       return Source.fromPublisher(((Stage.PublisherStage) stage).getRsPublisher());
-    } else if (stage instanceof Stage.Concat) {
+    }
+    else if (stage instanceof Stage.Concat) {
       Graph first = ((Stage.Concat) stage).getFirst();
       Graph second = ((Stage.Concat) stage).getSecond();
       return buildSource(first).concat(buildSource(second));
-    } else if (stage instanceof Stage.Failed) {
+    }
+    else if (stage instanceof Stage.Failed) {
       return Source.failed(((Stage.Failed) stage).getError());
-    } else if (stage.hasOutlet() && !stage.hasInlet()) {
+    }
+    else if (stage.hasOutlet() && !stage.hasInlet()) {
       throw new UnsupportedStageException(stage);
-    } else {
+    }
+    else {
       throw new IllegalStateException("Got " + stage + " but needed a stage with an outlet and no inlet.");
     }
   }
@@ -233,7 +304,7 @@ public class AkkaEngine implements ReactiveStreamsEngine {
 
   /**
    * This attribute does nothing except ensures a reference to this AkkaEngine is kept by the running stream.
-   *
+   * <p>
    * This is to prevent the cleaner used in the AkkaEngineProvider from finding that the AkkaEngine is unreachable
    * while a stream is still running, and shut the engine down. Once all streams stop running, the stream actor will
    * be disposed and the engine will become unreachable (as long as no user code references it), then it can be shut
