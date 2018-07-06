@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  ~ Copyright (c) 2018 Lightbend Inc.
+  ~
+  ~ See the NOTICE file(s) distributed with this work for additional
+  ~ information regarding copyright ownership.
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ You may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.lightbend.microprofile.reactive.streams</groupId>
+    <artifactId>lightbend-microprofile-reactive-streams-parent</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>Lightbend MicroProfile Reactive Streams Operators</name>
+    <description>Lightbend MicroProfile Reactive Streams Operators :: Parent POM</description>
+    <url>https://github.com/lightbend/lightbend-microprofile-streams</url>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+
+        <microprofile.reactive.streams.version>1.0-SNAPSHOT</microprofile.reactive.streams.version>
+        <akka.version>2.5.13</akka.version>
+    </properties>
+
+    <licenses>
+        <license>
+            <name>Apache-2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+            <comments>A business-friendly OSS license</comments>
+        </license>
+    </licenses>
+
+    <organization>
+        <name>Lightbend</name>
+        <url>https://www.lightbend.com</url>
+    </organization>
+
+    <issueManagement>
+        <system>GitHub</system>
+        <url>https://github.com/lightbend/microprofile-reactive-streams/issues</url>
+    </issueManagement>
+
+    <developers>
+        <developer>
+            <name>James Roper</name>
+            <url>https://jazzy.id.au</url>
+            <organization>Lightbend</organization>
+            <organizationUrl>https://www.lightbend.com</organizationUrl>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/lightbend/microprofile-reactive-streams.git</connection>
+        <developerConnection>scm:git:git@github.com:lightbend/microprofile-reactive-streams.git</developerConnection>
+        <url>https://github.com/lightbend/microprofile-reactive-streams</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <modules>
+        <module>akka</module>
+        <module>zerodep</module>
+    </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.eclipse.microprofile.reactive.streams</groupId>
+                <artifactId>microprofile-reactive-streams-operators</artifactId>
+                <version>${microprofile.reactive.streams.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.microprofile.reactive.streams</groupId>
+                <artifactId>microprofile-reactive-streams-operators-tck</artifactId>
+                <version>${microprofile.reactive.streams.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.typesafe.akka</groupId>
+                <artifactId>akka-actor_2.12</artifactId>
+                <version>${akka.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.typesafe.akka</groupId>
+                <artifactId>akka-stream_2.12</artifactId>
+                <version>${akka.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>25.0-jre</version>
+            </dependency>
+            <dependency>
+                <groupId>org.testng</groupId>
+                <artifactId>testng</artifactId>
+                <version>6.14.3</version>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-log4j12</artifactId>
+                <version>1.7.12</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>3.0.2</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>3.0.1</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <version>2.10.4</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+    <profiles>
+        <profile>
+            <!-- This allows custom deployments to arbitrary repositories,
+                 these properties are probably best set with profiles in
+                 settings.xml
+            -->
+            <id>custom-deploy</id>
+            <distributionManagement>
+                <repository>
+                    <id>${custom-deploy.id}</id>
+                    <url>${custom-deploy.url}</url>
+                </repository>
+                <snapshotRepository>
+                    <id>${custom-deploy.id}</id>
+                    <url>${custom-deploy.url}</url>
+                </snapshotRepository>
+            </distributionManagement>
+        </profile>
+    </profiles>
+</project>

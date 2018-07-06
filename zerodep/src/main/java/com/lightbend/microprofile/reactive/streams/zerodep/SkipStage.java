@@ -19,34 +19,37 @@
 
 package com.lightbend.microprofile.reactive.streams.zerodep;
 
-import java.util.function.Predicate;
-
 /**
  * A filter stage.
  */
-class FilterStage<T> extends GraphStage implements InletListener {
+class SkipStage<T> extends GraphStage implements InletListener {
   private final StageInlet<T> inlet;
   private final StageOutlet<T> outlet;
-  private final Predicate<T> predicate;
+  private final long toSkip;
+  private long count = 0;
 
-  FilterStage(BuiltGraph builtGraph, StageInlet<T> inlet, StageOutlet<T> outlet, Predicate<T> predicate) {
+  SkipStage(BuiltGraph builtGraph, StageInlet<T> inlet, StageOutlet<T> outlet, long toSkip) {
     super(builtGraph);
     this.inlet = inlet;
     this.outlet = outlet;
-    this.predicate = predicate;
+    this.toSkip = toSkip;
 
-    inlet.setListener(this);
+    if (toSkip == 0) {
+      inlet.forwardTo(outlet);
+    } else {
+      inlet.setListener(this);
+    }
     outlet.forwardTo(inlet);
   }
 
   @Override
   public void onPush() {
-    T element = inlet.grab();
-    if (predicate.test(element)) {
-      outlet.push(element);
-    } else {
-      inlet.pull();
+    count++;
+    inlet.grab();
+    if (count == toSkip) {
+      inlet.forwardTo(outlet);
     }
+    inlet.pull();
   }
 
   @Override

@@ -1,12 +1,20 @@
-/******************************************************************************
- * Licensed under Public Domain (CC0)                                         *
- *                                                                            *
- * To the extent possible under law, the person who associated CC0 with       *
- * this code has waived all copyright and related or neighboring              *
- * rights to this code.                                                       *
- *                                                                            *
- * You should have received a copy of the CC0 legalcode along with this       *
- * work. If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.     *
+/*******************************************************************************
+ * Copyright (c) 2018 Lightbend Inc.
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  ******************************************************************************/
 
 package com.lightbend.microprofile.reactive.streams.akka;
@@ -18,15 +26,16 @@ import org.eclipse.microprofile.reactive.streams.spi.ReactiveStreamsEngine;
 import org.eclipse.microprofile.reactive.streams.tck.CancelStageVerification;
 import org.eclipse.microprofile.reactive.streams.tck.FlatMapStageVerification;
 import org.eclipse.microprofile.reactive.streams.tck.ReactiveStreamsTck;
+import org.reactivestreams.tck.IdentityProcessorVerification;
 import org.reactivestreams.tck.TestEnvironment;
 import org.testng.annotations.AfterSuite;
 
 /**
  * TCK verification for the {@link AkkaEngine} implementation of the {@link ReactiveStreamsEngine}.
  */
-public class AkkaReactiveStreamsTck extends ReactiveStreamsTck<AkkaEngine> {
+public class AkkaReactiveStreamsTckTest extends ReactiveStreamsTck<AkkaEngine> {
 
-  public AkkaReactiveStreamsTck() {
+  public AkkaReactiveStreamsTckTest() {
     super(new TestEnvironment());
   }
 
@@ -49,10 +58,8 @@ public class AkkaReactiveStreamsTck extends ReactiveStreamsTck<AkkaEngine> {
 
   @Override
   protected boolean isEnabled(Object test) {
-    return true;
-    // Disabled due to https://github.com/akka/akka/issues/24719
-//    return !(test instanceof FlatMapStageVerification.InnerSubscriberVerification) &&
-        // Disabled due to https://github.com/akka/akka/pull/24749
-  //      !(test instanceof CancelStageVerification.SubscriberVerification);
+    // Temporarily disable all IdentityProcessorVerifications until
+    // https://github.com/akka/akka/pull/25311 is fixed.
+    return !(test instanceof IdentityProcessorVerification);
   }
 }
