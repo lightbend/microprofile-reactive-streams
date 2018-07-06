@@ -1,12 +1,20 @@
-/******************************************************************************
- * Licensed under Public Domain (CC0)                                         *
- *                                                                            *
- * To the extent possible under law, the person who associated CC0 with       *
- * this code has waived all copyright and related or neighboring              *
- * rights to this code.                                                       *
- *                                                                            *
- * You should have received a copy of the CC0 legalcode along with this       *
- * work. If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.     *
+/*******************************************************************************
+ * Copyright (c) 2018 Lightbend Inc.
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  ******************************************************************************/
 
 package com.lightbend.microprofile.reactive.streams.zerodep;
@@ -16,21 +24,19 @@ import java.util.function.Predicate;
 /**
  * Take while stage.
  */
-class TakeWhileStage<T> extends GraphStage implements InletListener, OutletListener {
+class TakeWhileStage<T> extends GraphStage implements InletListener {
   private final StageInlet<T> inlet;
   private final StageOutlet<T> outlet;
   private final Predicate<T> predicate;
-  private final boolean inclusive;
 
-  TakeWhileStage(BuiltGraph builtGraph, StageInlet<T> inlet, StageOutlet<T> outlet, Predicate<T> predicate, boolean inclusive) {
+  TakeWhileStage(BuiltGraph builtGraph, StageInlet<T> inlet, StageOutlet<T> outlet, Predicate<T> predicate) {
     super(builtGraph);
     this.inlet = inlet;
     this.outlet = outlet;
     this.predicate = predicate;
-    this.inclusive = inclusive;
 
     inlet.setListener(this);
-    outlet.setListener(this);
+    outlet.forwardTo(inlet);
   }
 
   @Override
@@ -39,11 +45,8 @@ class TakeWhileStage<T> extends GraphStage implements InletListener, OutletListe
     if (predicate.test(element)) {
       outlet.push(element);
     } else {
-      if (inclusive) {
-        outlet.push(element);
-      }
-      outlet.complete();
-      inlet.cancel();
+      if (!outlet.isClosed()) outlet.complete();
+      if (!inlet.isClosed()) inlet.cancel();
     }
   }
 
@@ -55,15 +58,5 @@ class TakeWhileStage<T> extends GraphStage implements InletListener, OutletListe
   @Override
   public void onUpstreamFailure(Throwable error) {
     outlet.fail(error);
-  }
-
-  @Override
-  public void onPull() {
-    inlet.pull();
-  }
-
-  @Override
-  public void onDownstreamFinish() {
-    inlet.cancel();
   }
 }

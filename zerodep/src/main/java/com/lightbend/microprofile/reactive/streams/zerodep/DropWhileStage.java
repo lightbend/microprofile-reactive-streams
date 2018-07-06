@@ -24,12 +24,12 @@ import java.util.function.Predicate;
 /**
  * A filter stage.
  */
-class FilterStage<T> extends GraphStage implements InletListener {
+class DropWhileStage<T> extends GraphStage implements InletListener {
   private final StageInlet<T> inlet;
   private final StageOutlet<T> outlet;
   private final Predicate<T> predicate;
 
-  FilterStage(BuiltGraph builtGraph, StageInlet<T> inlet, StageOutlet<T> outlet, Predicate<T> predicate) {
+  DropWhileStage(BuiltGraph builtGraph, StageInlet<T> inlet, StageOutlet<T> outlet, Predicate<T> predicate) {
     super(builtGraph);
     this.inlet = inlet;
     this.outlet = outlet;
@@ -43,9 +43,10 @@ class FilterStage<T> extends GraphStage implements InletListener {
   public void onPush() {
     T element = inlet.grab();
     if (predicate.test(element)) {
-      outlet.push(element);
-    } else {
       inlet.pull();
+    } else {
+      inlet.forwardTo(outlet);
+      outlet.push(element);
     }
   }
 

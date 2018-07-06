@@ -19,43 +19,18 @@
 
 package com.lightbend.microprofile.reactive.streams.zerodep;
 
-import java.util.function.Predicate;
+import org.eclipse.microprofile.reactive.streams.tck.ReactiveStreamsTck;
+import org.reactivestreams.tck.TestEnvironment;
 
-/**
- * A filter stage.
- */
-class FilterStage<T> extends GraphStage implements InletListener {
-  private final StageInlet<T> inlet;
-  private final StageOutlet<T> outlet;
-  private final Predicate<T> predicate;
+public class ReactiveStreamsEngineImplTckTest extends ReactiveStreamsTck<ReactiveStreamsEngineImpl> {
 
-  FilterStage(BuiltGraph builtGraph, StageInlet<T> inlet, StageOutlet<T> outlet, Predicate<T> predicate) {
-    super(builtGraph);
-    this.inlet = inlet;
-    this.outlet = outlet;
-    this.predicate = predicate;
-
-    inlet.setListener(this);
-    outlet.forwardTo(inlet);
+  public ReactiveStreamsEngineImplTckTest() {
+    super(new TestEnvironment(100));
   }
 
   @Override
-  public void onPush() {
-    T element = inlet.grab();
-    if (predicate.test(element)) {
-      outlet.push(element);
-    } else {
-      inlet.pull();
-    }
+  protected ReactiveStreamsEngineImpl createEngine() {
+    return new ReactiveStreamsEngineImpl();
   }
 
-  @Override
-  public void onUpstreamFinish() {
-    outlet.complete();
-  }
-
-  @Override
-  public void onUpstreamFailure(Throwable error) {
-    outlet.fail(error);
-  }
 }

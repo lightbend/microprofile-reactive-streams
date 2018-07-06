@@ -1,18 +1,26 @@
-/******************************************************************************
- * Licensed under Public Domain (CC0)                                         *
- *                                                                            *
- * To the extent possible under law, the person who associated CC0 with       *
- * this code has waived all copyright and related or neighboring              *
- * rights to this code.                                                       *
- *                                                                            *
- * You should have received a copy of the CC0 legalcode along with this       *
- * work. If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.     *
+/*******************************************************************************
+ * Copyright (c) 2018 Lightbend Inc.
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  ******************************************************************************/
 
 package com.lightbend.microprofile.reactive.streams.zerodep;
 
 
-import org.eclipse.microprofile.reactive.streams.SubscriberWithResult;
+import org.eclipse.microprofile.reactive.streams.CompletionSubscriber;
 import org.eclipse.microprofile.reactive.streams.spi.Graph;
 import org.eclipse.microprofile.reactive.streams.spi.Stage;
 import org.eclipse.microprofile.reactive.streams.spi.UnsupportedStageException;
@@ -73,7 +81,7 @@ class BuiltGraph implements Executor {
   /**
    * Build a subscriber graph.
    */
-  static <T, R> SubscriberWithResult<T, R> buildSubscriber(Executor mutex, Graph graph) {
+  static <T, R> CompletionSubscriber<T, R> buildSubscriber(Executor mutex, Graph graph) {
     return newBuilder(mutex).buildGraph(graph, Shape.SUBSCRIBER).subscriber();
   }
 
@@ -314,7 +322,7 @@ class BuiltGraph implements Executor {
       return lastPublisher;
     }
 
-    SubscriberWithResult subscriber() {
+    CompletionSubscriber subscriber() {
       Objects.requireNonNull(firstSubscriber, "Not a subscriber graph");
       Objects.requireNonNull(result, "Not a subscriber graph");
       assert lastPublisher == null;
@@ -323,7 +331,7 @@ class BuiltGraph implements Executor {
       verifyReady();
       startGraph();
 
-      return new SubscriberWithResult(firstSubscriber, result);
+      return CompletionSubscriber.of(firstSubscriber, result);
     }
 
     CompletionStage completion() {
@@ -393,11 +401,10 @@ class BuiltGraph implements Executor {
           addStage(new MapStage(BuiltGraph.this, inlet, outlet,
               ((Stage.Map) stage).getMapper()));
         } else if (stage instanceof Stage.Filter) {
-          addStage(new FilterStage(BuiltGraph.this, inlet, outlet, ((Stage.Filter) stage).getPredicate().get()));
+          addStage(new FilterStage(BuiltGraph.this, inlet, outlet, ((Stage.Filter) stage).getPredicate()));
         } else if (stage instanceof Stage.TakeWhile) {
-          Predicate predicate = ((Stage.TakeWhile) stage).getPredicate().get();
-          boolean inclusive = ((Stage.TakeWhile) stage).isInclusive();
-          addStage(new TakeWhileStage(BuiltGraph.this, inlet, outlet, predicate, inclusive));
+          Predicate predicate = ((Stage.TakeWhile) stage).getPredicate();
+          addStage(new TakeWhileStage(BuiltGraph.this, inlet, outlet, predicate));
         } else if (stage instanceof Stage.FlatMap) {
           addStage(new FlatMapStage(BuiltGraph.this, inlet, outlet, ((Stage.FlatMap) stage).getMapper()));
         } else if (stage instanceof Stage.FlatMapCompletionStage) {
@@ -408,6 +415,16 @@ class BuiltGraph implements Executor {
           Processor processor = ((Stage.ProcessorStage) stage).getRsProcessor();
           addStage(new ConnectorStage(BuiltGraph.this, publisher, processor));
           addStage(new ConnectorStage(BuiltGraph.this, processor, subscriber));
+        } else if (stage instanceof Stage.Distinct) {
+          addStage(new DistinctStage(BuiltGraph.this, inlet, outlet));
+        } else if (stage instanceof Stage.Limit) {
+          addStage(new LimitStage(BuiltGraph.this, inlet, outlet, ((Stage.Limit) stage).getLimit()));
+        } else if (stage instanceof Stage.Skip) {
+          addStage(new SkipStage<>(BuiltGraph.this, inlet, outlet, ((Stage.Skip) stage).getSkip()));
+        } else if (stage instanceof Stage.DropWhile) {
+          addStage(new DropWhileStage(BuiltGraph.this, inlet, outlet, ((Stage.DropWhile) stage).getPredicate()));
+        } else if (stage instanceof Stage.Peek) {
+          addStage(new PeekStage<>(BuiltGraph.this, inlet, outlet, ((Stage.Peek) stage).getConsumer()));
         } else {
           throw new UnsupportedStageException(stage);
         }
