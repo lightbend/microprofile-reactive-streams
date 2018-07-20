@@ -25,6 +25,4 @@ fi
 
 git checkout "${TRACKING_COMMIT}"
 
-cd streams
-
-mvn clean install -Dmaven.test.skip -Drat.skip=true -Dcheckstyle.skip=true -Dmaven.javadoc.skip=true -Dasciidoctor.skip=true
+mvn -am -pl streams/api,streams/tck clean install -Dmaven.test.skip -Drat.skip=true -Dcheckstyle.skip=true -Dmaven.javadoc.skip=true -Dasciidoctor.skip=true
