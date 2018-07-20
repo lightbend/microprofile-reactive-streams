@@ -17,14 +17,9 @@ final class StageOutletInlet<T> implements Port {
 
   private InletListener inletListener;
   private OutletListener outletListener;
-  private boolean inletPulled;
-  /**
-   * The pushed element is an element that has been pushed but for which onPush has not yet been invoked. Once onPush
-   * is invoked, it is transferred to currentElement. The reason for this separation is that pushing of elements is not
-   * done directly, in order to avoid infinite recursions between stages doing a push/pull back and forth.
-   */
+  private boolean outletPulled;
   private T pushedElement;
-  private T currentElement;
+  private boolean inletPushed;
   private boolean outletFinished;
   private boolean inletFinished;
   private Throwable failure;
@@ -59,44 +54,24 @@ final class StageOutletInlet<T> implements Port {
     }
   }
 
-  final class Outlet implements StageOutlet<T>, UnrolledSignal {
+  final class Outlet implements StageOutlet<T> {
     @Override
     public void push(T element) {
       Objects.requireNonNull(element, "Elements cannot be null");
       if (outletFinished) {
         throw new IllegalStateException("Can't push element after complete");
-      } else if (!inletPulled || currentElement != null || pushedElement != null) {
+      } else if (!outletPulled) {
         throw new IllegalStateException("Can't push element to outlet when it hasn't pulled");
       } else {
+        outletPulled = false;
         pushedElement = element;
-        builtGraph.enqueueSignal(this);
-      }
-    }
-
-    @Override
-    public void signal() {
-      if (!inletFinished) {
-        currentElement = pushedElement;
-        pushedElement = null;
-        inletListener.onPush();
-        // Possible that there was a pull/push cycle done during that onPush,
-        // followed by a complete, in which case, we don't want to publish that
-        // complete yet.
-        if (outletFinished && pushedElement == null && !inletFinished) {
-          inletFinished = true;
-          if (failure != null) {
-            inletListener.onUpstreamFailure(failure);
-            failure = null;
-          } else {
-            inletListener.onUpstreamFinish();
-          }
-        }
+        builtGraph.enqueueSignal(onPushSignal);
       }
     }
 
     @Override
     public boolean isAvailable() {
-      return !outletFinished && inletPulled && pushedElement == null && currentElement == null;
+      return !outletFinished && outletPulled;
     }
 
     @Override
@@ -105,11 +80,7 @@ final class StageOutletInlet<T> implements Port {
         throw new IllegalStateException("Can't complete twice.");
       }
       outletFinished = true;
-      inletPulled = false;
-      if (pushedElement == null && currentElement == null && !inletFinished) {
-        inletFinished = true;
-        inletListener.onUpstreamFinish();
-      }
+      builtGraph.enqueueSignal(onUpstreamFinishSignal);
     }
 
     @Override
@@ -124,13 +95,8 @@ final class StageOutletInlet<T> implements Port {
         throw new IllegalStateException("Can't complete twice.");
       }
       outletFinished = true;
-      inletPulled = false;
-      if (pushedElement == null && currentElement == null && !inletFinished) {
-        inletFinished = true;
-        inletListener.onUpstreamFailure(error);
-      } else {
-        failure = error;
-      }
+      failure = error;
+      builtGraph.enqueueSignal(onUpstreamErrorSignal);
     }
 
     @Override
@@ -140,6 +106,7 @@ final class StageOutletInlet<T> implements Port {
   }
 
   final class Inlet implements StageInlet<T> {
+    boolean inletPulled;
 
     @Override
     public void pull() {
@@ -147,12 +114,12 @@ final class StageOutletInlet<T> implements Port {
         throw new IllegalStateException("Can't pull after complete");
       } else if (inletPulled) {
         throw new IllegalStateException("Can't pull twice");
-      } else if (currentElement != null) {
+      } else if (pushedElement != null) {
         throw new IllegalStateException("Can't pull without having grabbed the previous element");
       }
       if (!outletFinished) {
         inletPulled = true;
-        outletListener.onPull();
+        builtGraph.enqueueSignal(onPullSignal);
       }
     }
 
@@ -163,7 +130,7 @@ final class StageOutletInlet<T> implements Port {
 
     @Override
     public boolean isAvailable() {
-      return currentElement != null;
+      return inletPushed;
     }
 
     @Override
@@ -177,22 +144,19 @@ final class StageOutletInlet<T> implements Port {
         throw new IllegalStateException("Stage already finished");
       }
       inletFinished = true;
-      currentElement = null;
-      inletPulled = false;
-      if (!outletFinished) {
-        outletFinished = true;
-        outletListener.onDownstreamFinish();
-      }
+      pushedElement = null;
+      builtGraph.enqueueSignal(onDownstreamFinishSignal);
     }
 
     @Override
     public T grab() {
-      if (currentElement == null) {
+      if (!inletPushed) {
         throw new IllegalStateException("Grab without onPush notification");
       }
-      T grabbed = currentElement;
+      T grabbed = pushedElement;
+      inletPushed = false;
       inletPulled = false;
-      currentElement = null;
+      pushedElement = null;
       return grabbed;
     }
 
@@ -201,4 +165,70 @@ final class StageOutletInlet<T> implements Port {
       inletListener = Objects.requireNonNull(listener, "Cannot register null listener");
     }
   }
+
+  private abstract class AbstractSignal implements Signal {
+    @Override
+    public void signalFailed(Throwable error) {
+      if (!outletFinished) {
+        outletFinished = true;
+        outletListener.onDownstreamFinish();
+      }
+      if (!inletFinished) {
+        inletFinished = true;
+        inletListener.onUpstreamFailure(error);
+      }
+    }
+  }
+
+  private final Signal onPullSignal = new AbstractSignal() {
+    @Override
+    public void signal() {
+      if (!outletFinished) {
+        outletPulled = true;
+        outletListener.onPull();
+      }
+    }
+  };
+
+  private final Signal onDownstreamFinishSignal = new AbstractSignal() {
+    @Override
+    public void signal() {
+      if (!outletFinished) {
+        outletFinished = true;
+        outletListener.onDownstreamFinish();
+      }
+    }
+  };
+
+  private final Signal onPushSignal = new AbstractSignal() {
+    @Override
+    public void signal() {
+      if (!inletFinished) {
+        inletPushed = true;
+        inletListener.onPush();
+      }
+    }
+  };
+
+  private final Signal onUpstreamFinishSignal = new AbstractSignal() {
+    @Override
+    public void signal() {
+      if (!inletFinished) {
+        inletFinished = true;
+        inletListener.onUpstreamFinish();
+      }
+    }
+  };
+
+  private final Signal onUpstreamErrorSignal = new AbstractSignal() {
+    @Override
+    public void signal() {
+      if (!inletFinished) {
+        inletFinished = true;
+        Throwable theFailure = failure;
+        failure = null;
+        inletListener.onUpstreamFailure(theFailure);
+      }
+    }
+  };
 }

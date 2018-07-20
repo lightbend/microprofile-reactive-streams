@@ -12,6 +12,9 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
+/**
+ * Differs from Flow.watchTermination in that cancellation results in the completion stage failing with a cancellation exception.
+ */
 class TerminationWatcher<T> extends GraphStageWithMaterializedValue<FlowShape<T, T>, CompletionStage<Void>> {
   private final Inlet<T> in = Inlet.create("TerminationWatcher.in");
   private final Outlet<T> out = Outlet.create("TerminationWatcher.out");

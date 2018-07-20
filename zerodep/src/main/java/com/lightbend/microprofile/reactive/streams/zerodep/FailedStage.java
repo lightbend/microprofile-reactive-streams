@@ -21,9 +21,7 @@ class FailedStage extends GraphStage implements OutletListener {
 
   @Override
   protected void postStart() {
-    if (!outlet.isClosed()) {
-      outlet.fail(error);
-    }
+    outlet.fail(error);
   }
 
   @Override

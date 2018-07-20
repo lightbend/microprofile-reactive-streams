@@ -16,14 +16,15 @@ import java.util.Objects;
  * This is either the last outlet for a graph that has an outlet, or is used to connect a Processor or Publisher stage
  * in a graph.
  */
-final class PublisherOutlet<T> implements StageOutlet<T>, Publisher<T>, Subscription, Port, UnrolledSignal {
+final class PublisherOutlet<T> implements StageOutlet<T>, Publisher<T>, Subscription, Port {
 
   private final BuiltGraph builtGraph;
 
   private Subscriber<? super T> subscriber;
   private boolean pulled;
   private long demand;
-  private boolean finished;
+  private boolean upstreamFinished;
+  private boolean downstreamFinished;
   private Throwable failure;
   private OutletListener listener;
 
@@ -33,19 +34,18 @@ final class PublisherOutlet<T> implements StageOutlet<T>, Publisher<T>, Subscrip
 
   @Override
   public void onStreamFailure(Throwable reason) {
-    if (!finished) {
-      finished = true;
-      demand = 0;
-      if (subscriber != null) {
-        try {
-          subscriber.onError(reason);
-        } catch (Exception e) {
-          // Ignore
-        }
-      } else {
-        failure = reason;
+    if (!upstreamFinished) {
+      upstreamFinished = true;
+      if (listener != null) {
+        listener.onDownstreamFinish();
       }
-      listener.onDownstreamFinish();
+    }
+    if (!downstreamFinished) {
+      failure = reason;
+      if (subscriber != null) {
+        downstreamFinished = true;
+        subscriber.onError(reason);
+      }
     }
   }
 
@@ -74,7 +74,8 @@ final class PublisherOutlet<T> implements StageOutlet<T>, Publisher<T>, Subscrip
       } else {
         this.subscriber = subscriber;
         subscriber.onSubscribe(this);
-        if (finished) {
+        if (upstreamFinished) {
+          downstreamFinished = true;
           if (failure != null) {
             subscriber.onError(failure);
             failure = null;
@@ -91,7 +92,7 @@ final class PublisherOutlet<T> implements StageOutlet<T>, Publisher<T>, Subscrip
   @Override
   public void request(long n) {
     builtGraph.execute(() -> {
-      if (!finished) {
+      if (!upstreamFinished) {
         if (n <= 0) {
           onStreamFailure(new IllegalArgumentException("Request demand must be greater than zero"));
         } else {
@@ -108,61 +109,55 @@ final class PublisherOutlet<T> implements StageOutlet<T>, Publisher<T>, Subscrip
     });
   }
 
-  @Override
-  public void signal() {
-    if (!finished && !pulled) {
-      doPull();
-    }
-  }
-
   private void doPull() {
-    pulled = true;
-    listener.onPull();
+    builtGraph.enqueueSignal(onPullSignal);
   }
 
   @Override
   public void cancel() {
     builtGraph.execute(() -> {
       subscriber = null;
-      if (!finished) {
-        finished = true;
-        demand = 0;
-        listener.onDownstreamFinish();
-      }
+      demand = 0;
+      builtGraph.enqueueSignal(onDownstreamFinishSignal);
     });
   }
 
   @Override
   public void push(T element) {
     Objects.requireNonNull(element, "Elements cannot be null");
-    if (finished) {
+    if (upstreamFinished) {
       throw new IllegalStateException("Can't push after publisher is finished");
     } else if (demand <= 0) {
       throw new IllegalStateException("Push without pull");
     }
     pulled = false;
-    if (demand != Long.MAX_VALUE) {
-      demand -= 1;
+    if (!downstreamFinished) {
+      if (demand != Long.MAX_VALUE) {
+        demand -= 1;
+      }
+      subscriber.onNext(element);
+      if (demand > 0) {
+        doPull();
+      }
+
     }
-    subscriber.onNext(element);
-    if (demand > 0) {
-      builtGraph.enqueueSignal(this);
-    }
+
   }
 
   @Override
   public boolean isAvailable() {
-    return !finished && pulled;
+    return !upstreamFinished && pulled;
   }
 
   @Override
   public void complete() {
-    if (finished) {
+    if (upstreamFinished) {
       throw new IllegalStateException("Can't complete twice");
     } else {
-      finished = true;
+      upstreamFinished = true;
       demand = 0;
-      if (subscriber != null) {
+      if (subscriber != null && !downstreamFinished) {
+        downstreamFinished = true;
         subscriber.onComplete();
         subscriber = null;
       }
@@ -171,18 +166,19 @@ final class PublisherOutlet<T> implements StageOutlet<T>, Publisher<T>, Subscrip
 
   @Override
   public boolean isClosed() {
-    return finished;
+    return upstreamFinished;
   }
 
   @Override
   public void fail(Throwable error) {
     Objects.requireNonNull(error, "Error must not be null");
-    if (finished) {
+    if (upstreamFinished) {
       throw new IllegalStateException("Can't complete twice");
     } else {
-      finished = true;
+      upstreamFinished = true;
       demand = 0;
-      if (subscriber != null) {
+      if (subscriber != null && !downstreamFinished) {
+        downstreamFinished = true;
         subscriber.onError(error);
         subscriber = null;
       } else {
@@ -195,4 +191,31 @@ final class PublisherOutlet<T> implements StageOutlet<T>, Publisher<T>, Subscrip
   public void setListener(OutletListener listener) {
     this.listener = Objects.requireNonNull(listener, "Listener must not be null");
   }
+
+  private abstract class AbstractSignal implements Signal {
+    @Override
+    public void signalFailed(Throwable error) {
+      onStreamFailure(error);
+    }
+  }
+
+  private final Signal onPullSignal = new AbstractSignal() {
+    @Override
+    public void signal() {
+      if (!upstreamFinished) {
+        pulled = true;
+        listener.onPull();
+      }
+    }
+  };
+
+  private final Signal onDownstreamFinishSignal = new AbstractSignal() {
+    @Override
+    public void signal() {
+      if (!upstreamFinished) {
+        upstreamFinished = true;
+        listener.onDownstreamFinish();
+      }
+    }
+  };
 }

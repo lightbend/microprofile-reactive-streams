@@ -43,7 +43,7 @@ class BuiltGraph implements Executor {
   private static final int DEFAULT_BUFFER_LOW_WATERMARK = 4;
 
   private final Executor mutex;
-  private final Deque<UnrolledSignal> unrolledSignals = new ArrayDeque<>();
+  private final Deque<Signal> signals = new ArrayDeque<>();
   private final Set<Port> ports = new LinkedHashSet<>();
   private final Set<GraphStage> stages = new LinkedHashSet<>();
 
@@ -197,10 +197,10 @@ class BuiltGraph implements Executor {
             if (isSubscriber(stage)) {
               // We're connecting a publisher to a subscriber, don't create any port, just record what the current
               // publisher is.
-              if (previousStage instanceof Stage.PublisherStage) {
-                currentPublisher = ((Stage.PublisherStage) previousStage).getRsPublisher();
+              if (stage instanceof Stage.SubscriberStage) {
+                currentSubscriber = ((Stage.SubscriberStage) stage).getRsSubscriber();
               } else {
-                currentPublisher = ((Stage.ProcessorStage) previousStage).getRsProcessor();
+                currentSubscriber = ((Stage.ProcessorStage) stage).getRsProcessor();
               }
             } else {
               // We're connecting a publisher to an inlet, create a subscriber inlet for that.
@@ -373,7 +373,7 @@ class BuiltGraph implements Executor {
 
           addStage(new ConcatStage(BuiltGraph.this, firstInlet, secondInlet, outlet));
         } else if (stage instanceof Stage.PublisherStage) {
-          addStage(new ConnectorStage<>(BuiltGraph.this, ((Stage.PublisherStage) stage).getRsPublisher(), subscriber));
+          addStage(new ConnectorStage(BuiltGraph.this, ((Stage.PublisherStage) stage).getRsPublisher(), subscriber));
         } else if (stage instanceof Stage.Failed) {
           addStage(new FailedStage(BuiltGraph.this, outlet, ((Stage.Failed) stage).getError()));
         } else {
@@ -410,6 +410,12 @@ class BuiltGraph implements Executor {
           addStage(new DropWhileStage(BuiltGraph.this, inlet, outlet, ((Stage.DropWhile) stage).getPredicate()));
         } else if (stage instanceof Stage.Peek) {
           addStage(new PeekStage<>(BuiltGraph.this, inlet, outlet, ((Stage.Peek) stage).getConsumer()));
+        } else if (stage instanceof Stage.OnComplete) {
+          addStage(new OnCompleteStage<>(BuiltGraph.this, inlet, outlet, ((Stage.OnComplete) stage).getAction()));
+        } else if (stage instanceof Stage.OnError) {
+          addStage(new OnErrorStage<>(BuiltGraph.this, inlet, outlet, ((Stage.OnError) stage).getConsumer()));
+        } else if (stage instanceof Stage.OnTerminate) {
+          addStage(new OnTerminateStage<>(BuiltGraph.this, inlet, outlet, ((Stage.OnTerminate) stage).getAction()));
         } else {
           throw new UnsupportedStageException(stage);
         }
@@ -429,8 +435,6 @@ class BuiltGraph implements Executor {
             SubscriberInlet subscriberInlet = addPort(createSubscriberInlet());
             if (publisher != null) {
               addStage(new ConnectorStage(BuiltGraph.this, publisher, subscriberInlet));
-            } else {
-              firstSubscriber = subscriberInlet;
             }
             inlet = subscriberInlet;
           }
@@ -473,7 +477,7 @@ class BuiltGraph implements Executor {
    * from all other signals on this graph. Any exceptions thrown by the command will cause the graph to be terminated
    * with a failure.
    * <p>
-   * Commands are also allowed to (synchronously) emit unrolled signals, by adding them to the unrolledSignals queue.
+   * Commands are also allowed to (synchronously) emit unrolled signals, by adding them to the signals queue.
    * Unrolled signals are used for breaking infinite recursion scenarios. This method will drain all unrolled signals
    * (including subsequent signals emitted by the unrolled signals themselves) after invocation of the command.
    *
@@ -488,14 +492,19 @@ class BuiltGraph implements Executor {
 
         // Now drain a maximum of 32 signals from the queue
         int signalsDrained = 0;
-        while (!unrolledSignals.isEmpty() && signalsDrained < 32) {
+        while (!signals.isEmpty() && signalsDrained < 32) {
           signalsDrained++;
-          unrolledSignals.poll().signal();
+          Signal signal = signals.removeFirst();
+          try {
+            signal.signal();
+          } catch (RuntimeException e) {
+            signal.signalFailed(e);
+          }
         }
 
         // If there were more than 32 unrolled signals, we resubmit
         // to the executor to allow us to receive external signals
-        if (!unrolledSignals.isEmpty()) {
+        if (!signals.isEmpty()) {
           execute(() -> {
           });
         }
@@ -504,7 +513,7 @@ class BuiltGraph implements Executor {
         // shut down the stream
         streamFailure(e);
         // Clear remaining signals
-        unrolledSignals.clear();
+        signals.clear();
       }
     });
   }
@@ -524,11 +533,7 @@ class BuiltGraph implements Executor {
     // todo handle better
     error.printStackTrace();
     for (Port port : ports) {
-      try {
-        port.onStreamFailure(error);
-      } catch (RuntimeException e) {
-        // Ignore
-      }
+      port.onStreamFailure(error);
     }
     ports.clear();
   }
@@ -536,8 +541,8 @@ class BuiltGraph implements Executor {
   /**
    * Enqueue a signal to be executed serially after the current signal processing finishes.
    */
-  void enqueueSignal(UnrolledSignal signal) {
-    unrolledSignals.add(signal);
+  void enqueueSignal(Signal signal) {
+    signals.add(signal);
   }
 
   /**
@@ -631,34 +636,5 @@ class BuiltGraph implements Executor {
     }
   }
 
-}
-
-
-/**
- * An unrolled signal.
- * <p>
- * It is possible for stages to get into an infinite recursion, doing push/pulls between each other. This interface
- * allows them to unroll the recursion, by adding the signal to the unrolledSignals queue in this class, which then
- * gets executed after the first callback is executed.
- */
-interface UnrolledSignal {
-  void signal();
-}
-
-/**
- * A port, which may sit between two stages of this graph.
- */
-interface Port {
-  /**
-   * If an exception is thrown by the graph, or otherwise encountered, each port will be shut down in the order they
-   * were created, by invoking this. This method should implement any clean up associated with a port, if the port
-   * isn't already shut down.
-   */
-  void onStreamFailure(Throwable reason);
-
-  /**
-   * Verify that this port is ready to start receiving signals.
-   */
-  void verifyReady();
 }
 
