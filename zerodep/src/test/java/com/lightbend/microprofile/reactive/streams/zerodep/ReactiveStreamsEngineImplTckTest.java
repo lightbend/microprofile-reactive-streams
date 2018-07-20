@@ -4,7 +4,7 @@
 
 package com.lightbend.microprofile.reactive.streams.zerodep;
 
-import org.eclipse.microprofile.reactive.streams.tck.ReactiveStreamsTck;
+import org.eclipse.microprofile.reactive.streams.tck.*;
 import org.reactivestreams.tck.TestEnvironment;
 
 public class ReactiveStreamsEngineImplTckTest extends ReactiveStreamsTck<ReactiveStreamsEngineImpl> {
@@ -17,5 +17,4 @@ public class ReactiveStreamsEngineImplTckTest extends ReactiveStreamsTck<Reactiv
   protected ReactiveStreamsEngineImpl createEngine() {
     return new ReactiveStreamsEngineImpl();
   }
-
 }

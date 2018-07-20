@@ -23,9 +23,7 @@ class CancelStage extends GraphStage implements InletListener {
 
   @Override
   protected void postStart() {
-    if (!inlet.isClosed()) {
-      inlet.cancel();
-    }
+    inlet.cancel();
     result.complete(null);
   }
 

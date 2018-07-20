@@ -23,17 +23,15 @@ class OfStage<T> extends GraphStage implements OutletListener {
 
   @Override
   protected void postStart() {
-    if (!outlet.isClosed()) {
-      if (!elements.hasNext()) {
-        outlet.complete();
-      }
+    if (!elements.hasNext()) {
+      outlet.complete();
     }
   }
 
   @Override
   public void onPull() {
     outlet.push(elements.next());
-    if (!elements.hasNext() && !outlet.isClosed()) {
+    if (!elements.hasNext()) {
       outlet.complete();
     }
   }

@@ -33,18 +33,15 @@ class LimitStage<T> extends GraphStage implements InletListener {
   @Override
   public void onPush() {
     T element = inlet.grab();
-    count++;
-    if (count <= maxSize) {
-      outlet.push(element);
-      if (count == maxSize) {
-        closeAll();
-      }
+    outlet.push(element);
+    if (++count == maxSize) {
+      closeAll();
     }
   }
 
   private void closeAll() {
-    if (!outlet.isClosed()) outlet.complete();
-    if (!inlet.isClosed()) inlet.cancel();
+    outlet.complete();
+    inlet.cancel();
   }
 
   @Override

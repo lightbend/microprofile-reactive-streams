@@ -84,6 +84,9 @@ interface OutletListener {
   /**
    * A completion signal, indicates that downstream has completed. No further signals may be sent to this outlet after
    * this signal is received.
+   *
+   * This must be very careful not to throw an exception. If it does, then the signal to cancel will not reach
+   * upstream.
    */
   void onDownstreamFinish();
 }

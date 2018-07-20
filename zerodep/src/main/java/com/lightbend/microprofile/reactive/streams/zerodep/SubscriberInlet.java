@@ -17,13 +17,12 @@ import java.util.Objects;
  * This is either the first inlet for a graph that has an inlet, or is used to connect a Processor or Subscriber stage
  * in a graph.
  */
-final class SubscriberInlet<T> implements StageInlet<T>, Subscriber<T>, Port, UnrolledSignal {
+final class SubscriberInlet<T> implements StageInlet<T>, Subscriber<T>, Port {
   private final BuiltGraph builtGraph;
   private final int bufferHighWatermark;
   private final int bufferLowWatermark;
 
   private final Deque<T> elements = new ArrayDeque<>();
-  private T elementToPush;
   private Subscription subscription;
   private int outstandingDemand;
   private InletListener listener;
@@ -31,6 +30,7 @@ final class SubscriberInlet<T> implements StageInlet<T>, Subscriber<T>, Port, Un
   private boolean downstreamFinished;
   private Throwable error;
   private boolean pulled;
+  private boolean pushed;
 
   SubscriberInlet(BuiltGraph builtGraph, int bufferHighWatermark, int bufferLowWatermark) {
     this.builtGraph = builtGraph;
@@ -40,17 +40,17 @@ final class SubscriberInlet<T> implements StageInlet<T>, Subscriber<T>, Port, Un
 
   @Override
   public void onStreamFailure(Throwable reason) {
-    if (!upstreamFinished && subscription != null) {
-      upstreamFinished = true;
-      try {
-        subscription.cancel();
-      } catch (RuntimeException e) {
-        // Ignore
-      }
-      subscription = null;
-      if (!downstreamFinished) {
-        downstreamFinished = true;
+    if (!downstreamFinished) {
+      downstreamFinished = true;
+      if (listener != null) {
         listener.onUpstreamFailure(reason);
+      }
+    }
+    if (!upstreamFinished) {
+      if (subscription != null) {
+        upstreamFinished = true;
+        subscription.cancel();
+        subscription = null;
       }
     }
   }
@@ -80,8 +80,8 @@ final class SubscriberInlet<T> implements StageInlet<T>, Subscriber<T>, Port, Un
       int bufferSize = outstandingDemand + elements.size();
       if (bufferSize <= bufferLowWatermark) {
         int toRequest = bufferHighWatermark - bufferSize;
-        subscription.request(toRequest);
         outstandingDemand += toRequest;
+        subscription.request(toRequest);
       }
     }
   }
@@ -97,29 +97,12 @@ final class SubscriberInlet<T> implements StageInlet<T>, Subscriber<T>, Port, Un
       } else {
         outstandingDemand -= 1;
         elements.add(item);
-        if (pulled && elementToPush == null) {
-          builtGraph.enqueueSignal(this);
+        if (pulled) {
+          pushed = true;
+          builtGraph.enqueueSignal(onPushSignal);
         }
       }
     });
-  }
-
-  @Override
-  public void signal() {
-    if (!downstreamFinished) {
-      if (!elements.isEmpty() && elementToPush == null) {
-        elementToPush = elements.poll();
-        listener.onPush();
-      } else if (upstreamFinished) {
-        downstreamFinished = true;
-        if (error == null) {
-          listener.onUpstreamFinish();
-        } else {
-          listener.onUpstreamFailure(error);
-          error = null;
-        }
-      }
-    }
   }
 
   @Override
@@ -130,13 +113,10 @@ final class SubscriberInlet<T> implements StageInlet<T>, Subscriber<T>, Port, Un
         // Ignore
       } else {
         subscription = null;
+        upstreamFinished = true;
+        error = throwable;
         if (elements.isEmpty()) {
-          downstreamFinished = true;
-          upstreamFinished = true;
-          listener.onUpstreamFailure(throwable);
-        } else {
-          upstreamFinished = true;
-          error = throwable;
+          builtGraph.enqueueSignal(onUpstreamFailureSignal);
         }
       }
     });
@@ -149,12 +129,9 @@ final class SubscriberInlet<T> implements StageInlet<T>, Subscriber<T>, Port, Un
         // Ignore
       } else {
         subscription = null;
+        upstreamFinished = true;
         if (elements.isEmpty()) {
-          downstreamFinished = true;
-          upstreamFinished = true;
-          listener.onUpstreamFinish();
-        } else {
-          upstreamFinished = true;
+          builtGraph.enqueueSignal(onUpstreamFinishSignal);
         }
       }
     });
@@ -169,7 +146,8 @@ final class SubscriberInlet<T> implements StageInlet<T>, Subscriber<T>, Port, Un
     }
     pulled = true;
     if (!elements.isEmpty()) {
-      builtGraph.enqueueSignal(this);
+      pushed = true;
+      builtGraph.enqueueSignal(onPushSignal);
     }
   }
 
@@ -194,12 +172,11 @@ final class SubscriberInlet<T> implements StageInlet<T>, Subscriber<T>, Port, Un
       throw new IllegalStateException("Can't cancel twice");
     } else {
       downstreamFinished = true;
-      upstreamFinished = true;
       error = null;
       elements.clear();
       if (subscription != null) {
+        upstreamFinished = true;
         subscription.cancel();
-        subscription = null;
       }
     }
   }
@@ -210,16 +187,20 @@ final class SubscriberInlet<T> implements StageInlet<T>, Subscriber<T>, Port, Un
       throw new IllegalStateException("Can't grab when finished");
     } else if (!pulled) {
       throw new IllegalStateException("Can't grab when not pulled");
-    } else if (elementToPush == null) {
+    } else if (!pushed) {
       throw new IllegalStateException("Grab without onPush");
     } else {
+      pushed = false;
       pulled = false;
-      T element = elementToPush;
-      elementToPush = null;
+      T element = elements.removeFirst();
       // Signal another signal so that we can notify downstream complete after
       // it gets the element without pulling first.
       if (elements.isEmpty() && upstreamFinished) {
-        builtGraph.enqueueSignal(this);
+        if (error != null) {
+          builtGraph.enqueueSignal(onUpstreamFailureSignal);
+        } else {
+          builtGraph.enqueueSignal(onUpstreamFinishSignal);
+        }
       } else {
         maybeRequest();
       }
@@ -231,4 +212,42 @@ final class SubscriberInlet<T> implements StageInlet<T>, Subscriber<T>, Port, Un
   public void setListener(InletListener listener) {
     this.listener = Objects.requireNonNull(listener, "Listener must not be null");
   }
+
+  private abstract class AbstractSignal implements Signal {
+    @Override
+    public void signalFailed(Throwable error) {
+      onStreamFailure(error);
+    }
+  }
+
+  private final Signal onPushSignal = new AbstractSignal() {
+    @Override
+    public void signal() {
+      if (!downstreamFinished) {
+        listener.onPush();
+      }
+    }
+  };
+
+  private final Signal onUpstreamFinishSignal = new AbstractSignal() {
+    @Override
+    public void signal() {
+      if (!downstreamFinished) {
+        downstreamFinished = true;
+        listener.onUpstreamFinish();
+      }
+    }
+  };
+
+  private final Signal onUpstreamFailureSignal = new AbstractSignal() {
+    @Override
+    public void signal() {
+      if (!downstreamFinished) {
+        downstreamFinished = true;
+        Throwable theFailure = error;
+        error = null;
+        listener.onUpstreamFailure(theFailure);
+      }
+    }
+  };
 }

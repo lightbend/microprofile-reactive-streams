@@ -22,9 +22,7 @@ class FindFirstStage<T> extends GraphStage implements InletListener {
 
   @Override
   protected void postStart() {
-    if (!inlet.isClosed()) {
-      inlet.pull();
-    }
+    inlet.pull();
   }
 
   @Override

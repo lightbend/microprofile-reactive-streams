@@ -95,12 +95,18 @@ interface InletListener {
 
   /**
    * Indicates that upstream has completed the stream. No signals may be sent to the inlet after this has been invoked.
+   *
+   * This must be very careful not to throw an exception. If it does, then the signal to complete will not reach
+   * downstream.
    */
   void onUpstreamFinish();
 
   /**
    * Indicates that upstream has completed the stream with a failure. No signals may be sent to the inlet after this has
    * been invoked.
+   *
+   * This must be very careful not to throw an exception. If it does, then the signal to complete will not reach
+   * downstream.
    */
   void onUpstreamFailure(Throwable error);
 }

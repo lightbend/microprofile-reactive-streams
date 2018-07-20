@@ -29,10 +29,7 @@ class CollectStage<T, A, R> extends GraphStage implements InletListener {
 
   @Override
   protected void postStart() {
-    // It's possible that an earlier stage finished immediately, so check first
-    if (!inlet.isClosed()) {
-      inlet.pull();
-    }
+    inlet.pull();
   }
 
   @Override
@@ -43,7 +40,11 @@ class CollectStage<T, A, R> extends GraphStage implements InletListener {
 
   @Override
   public void onUpstreamFinish() {
-    result.complete(collector.finisher().apply(container));
+    try {
+      result.complete(collector.finisher().apply(container));
+    } catch (RuntimeException e) {
+      result.completeExceptionally(e);
+    }
     container = null;
   }
 
