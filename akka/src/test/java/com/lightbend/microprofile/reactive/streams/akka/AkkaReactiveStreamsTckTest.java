@@ -43,8 +43,6 @@ public class AkkaReactiveStreamsTckTest extends ReactiveStreamsTck<AkkaEngine> {
 
   @Override
   protected boolean isEnabled(Object test) {
-    // Temporarily disable all IdentityProcessorVerifications until
-    // https://github.com/akka/akka/pull/25311 is fixed.
-    return !(test instanceof IdentityProcessorVerification);
+    return true;
   }
 }
