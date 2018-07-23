@@ -166,23 +166,22 @@ final class StageOutletInlet<T> implements Port {
     }
   }
 
-  private abstract class AbstractSignal implements Signal {
+  private abstract class RecoverableSignal implements Signal {
     @Override
-    public void signalFailed(Throwable error) {
-      if (!outletFinished) {
-        outletFinished = true;
-        outletListener.onDownstreamFinish();
-      }
-      if (!inletFinished) {
-        inletFinished = true;
-        inletListener.onUpstreamFailure(error);
+    public final void signal() {
+      try {
+        doSignal();
+      } catch (Exception e) {
+        onStreamFailure(e);
       }
     }
+
+    protected abstract void doSignal();
   }
 
-  private final Signal onPullSignal = new AbstractSignal() {
+  private final Signal onPullSignal = new RecoverableSignal() {
     @Override
-    public void signal() {
+    protected void doSignal() {
       if (!outletFinished) {
         outletPulled = true;
         outletListener.onPull();
@@ -190,19 +189,16 @@ final class StageOutletInlet<T> implements Port {
     }
   };
 
-  private final Signal onDownstreamFinishSignal = new AbstractSignal() {
-    @Override
-    public void signal() {
-      if (!outletFinished) {
-        outletFinished = true;
-        outletListener.onDownstreamFinish();
-      }
+  private final Signal onDownstreamFinishSignal = () -> {
+    if (!outletFinished) {
+      outletFinished = true;
+      outletListener.onDownstreamFinish();
     }
   };
 
-  private final Signal onPushSignal = new AbstractSignal() {
+  private final Signal onPushSignal = new RecoverableSignal() {
     @Override
-    public void signal() {
+    protected void doSignal() {
       if (!inletFinished) {
         inletPushed = true;
         inletListener.onPush();
@@ -210,25 +206,27 @@ final class StageOutletInlet<T> implements Port {
     }
   };
 
-  private final Signal onUpstreamFinishSignal = new AbstractSignal() {
-    @Override
-    public void signal() {
-      if (!inletFinished) {
-        inletFinished = true;
+  private final Signal onUpstreamFinishSignal = () -> {
+    if (!inletFinished) {
+      inletFinished = true;
+      try {
         inletListener.onUpstreamFinish();
+      } catch (Exception e) {
+        inletListener.onUpstreamFailure(e);
+        if (!outletFinished) {
+          outletFinished = true;
+          outletListener.onDownstreamFinish();
+        }
       }
     }
   };
 
-  private final Signal onUpstreamErrorSignal = new AbstractSignal() {
-    @Override
-    public void signal() {
-      if (!inletFinished) {
-        inletFinished = true;
-        Throwable theFailure = failure;
-        failure = null;
-        inletListener.onUpstreamFailure(theFailure);
-      }
+  private final Signal onUpstreamErrorSignal = () -> {
+    if (!inletFinished) {
+      inletFinished = true;
+      Throwable theFailure = failure;
+      failure = null;
+      inletListener.onUpstreamFailure(theFailure);
     }
   };
 }

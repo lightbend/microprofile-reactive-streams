@@ -494,12 +494,7 @@ class BuiltGraph implements Executor {
         int signalsDrained = 0;
         while (!signals.isEmpty() && signalsDrained < 32) {
           signalsDrained++;
-          Signal signal = signals.removeFirst();
-          try {
-            signal.signal();
-          } catch (RuntimeException e) {
-            signal.signalFailed(e);
-          }
+          signals.removeFirst().signal();
         }
 
         // If there were more than 32 unrolled signals, we resubmit
@@ -509,9 +504,9 @@ class BuiltGraph implements Executor {
           });
         }
 
-      } catch (RuntimeException e) {
+      } catch (Throwable t) {
         // shut down the stream
-        streamFailure(e);
+        streamFailure(t);
         // Clear remaining signals
         signals.clear();
       }
@@ -533,7 +528,11 @@ class BuiltGraph implements Executor {
     // todo handle better
     error.printStackTrace();
     for (Port port : ports) {
-      port.onStreamFailure(error);
+      try {
+        port.onStreamFailure(error);
+      } catch (Exception e) {
+        // Ignore
+      }
     }
     ports.clear();
   }

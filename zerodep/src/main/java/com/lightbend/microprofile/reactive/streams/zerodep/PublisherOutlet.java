@@ -41,10 +41,11 @@ final class PublisherOutlet<T> implements StageOutlet<T>, Publisher<T>, Subscrip
       }
     }
     if (!downstreamFinished) {
-      failure = reason;
       if (subscriber != null) {
         downstreamFinished = true;
         subscriber.onError(reason);
+      } else {
+        failure = reason;
       }
     }
   }
@@ -91,6 +92,7 @@ final class PublisherOutlet<T> implements StageOutlet<T>, Publisher<T>, Subscrip
 
   @Override
   public void request(long n) {
+    // possible optimization: place n in a queue, and dispatch singleton runnable to executor, to save an allocation
     builtGraph.execute(() -> {
       if (!upstreamFinished) {
         if (n <= 0) {
@@ -192,30 +194,21 @@ final class PublisherOutlet<T> implements StageOutlet<T>, Publisher<T>, Subscrip
     this.listener = Objects.requireNonNull(listener, "Listener must not be null");
   }
 
-  private abstract class AbstractSignal implements Signal {
-    @Override
-    public void signalFailed(Throwable error) {
-      onStreamFailure(error);
-    }
-  }
-
-  private final Signal onPullSignal = new AbstractSignal() {
-    @Override
-    public void signal() {
-      if (!upstreamFinished) {
-        pulled = true;
+  private final Signal onPullSignal = () -> {
+    if (!upstreamFinished) {
+      pulled = true;
+      try {
         listener.onPull();
+      } catch (Exception e) {
+        onStreamFailure(e);
       }
     }
   };
 
-  private final Signal onDownstreamFinishSignal = new AbstractSignal() {
-    @Override
-    public void signal() {
-      if (!upstreamFinished) {
-        upstreamFinished = true;
-        listener.onDownstreamFinish();
-      }
+  private final Signal onDownstreamFinishSignal = () -> {
+    if (!upstreamFinished) {
+      upstreamFinished = true;
+      listener.onDownstreamFinish();
     }
   };
 }

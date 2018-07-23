@@ -78,15 +78,20 @@ interface StageOutlet<T> {
 interface OutletListener {
   /**
    * A pull signal, indicates that downstream is ready to be pushed to.
+   * <p>
+   * If this throws an exception, the stage will be cancelled using {@link #onDownstreamFinish()} and the error will
+   * be propagated downstream.
    */
   void onPull();
 
   /**
    * A completion signal, indicates that downstream has completed. No further signals may be sent to this outlet after
    * this signal is received.
-   *
-   * This must be very careful not to throw an exception. If it does, then the signal to cancel will not reach
-   * upstream.
+   * <p>
+   * If this throws an exception, the entire stream will be shut down, since there's no other way to guarantee that
+   * the cancel signal will be propagated upstream. Hence, stages should generally not throw exceptions from this
+   * method, particularly exceptions from user supplied callbacks, as such errors will not be recoverable (eg, a
+   * recover stage won't be able to resume the stream).
    */
   void onDownstreamFinish();
 }
