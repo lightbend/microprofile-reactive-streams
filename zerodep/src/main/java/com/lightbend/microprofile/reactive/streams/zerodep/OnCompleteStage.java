@@ -25,12 +25,8 @@ class OnCompleteStage<T> extends GraphStage implements InletListener {
 
   @Override
   public void onUpstreamFinish() {
-    try {
-      action.run();
-      outlet.complete();
-    } catch (RuntimeException e) {
-      outlet.fail(e);
-    }
+    action.run();
+    outlet.complete();
   }
 
   @Override

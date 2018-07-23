@@ -40,11 +40,7 @@ class CollectStage<T, A, R> extends GraphStage implements InletListener {
 
   @Override
   public void onUpstreamFinish() {
-    try {
-      result.complete(collector.finisher().apply(container));
-    } catch (RuntimeException e) {
-      result.completeExceptionally(e);
-    }
+    result.complete(collector.finisher().apply(container));
     container = null;
   }
 

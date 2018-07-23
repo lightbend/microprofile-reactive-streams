@@ -89,6 +89,8 @@ final class SubscriberInlet<T> implements StageInlet<T>, Subscriber<T>, Port {
   @Override
   public void onNext(T item) {
     Objects.requireNonNull(item, "Elements passed to onNext must not be null");
+    // possible optimization: place item in a queue, and dispatch singleton runnable to executor, to save an
+    // allocation
     builtGraph.execute(() -> {
       if (downstreamFinished || upstreamFinished) {
         // Ignore events after cancellation or complete
@@ -213,41 +215,37 @@ final class SubscriberInlet<T> implements StageInlet<T>, Subscriber<T>, Port {
     this.listener = Objects.requireNonNull(listener, "Listener must not be null");
   }
 
-  private abstract class AbstractSignal implements Signal {
-    @Override
-    public void signalFailed(Throwable error) {
-      onStreamFailure(error);
-    }
-  }
-
-  private final Signal onPushSignal = new AbstractSignal() {
-    @Override
-    public void signal() {
+  private final Signal onPushSignal = () -> {
+    try {
       if (!downstreamFinished) {
         listener.onPush();
       }
+    } catch (Exception e) {
+      onStreamFailure(e);
     }
   };
 
-  private final Signal onUpstreamFinishSignal = new AbstractSignal() {
-    @Override
-    public void signal() {
-      if (!downstreamFinished) {
-        downstreamFinished = true;
+  private final Signal onUpstreamFinishSignal = () -> {
+    if (!downstreamFinished) {
+      downstreamFinished = true;
+      try {
         listener.onUpstreamFinish();
+      } catch (Exception e) {
+        listener.onUpstreamFailure(e);
+        if (!upstreamFinished) {
+          upstreamFinished = true;
+          subscription.cancel();
+        }
       }
     }
   };
 
-  private final Signal onUpstreamFailureSignal = new AbstractSignal() {
-    @Override
-    public void signal() {
-      if (!downstreamFinished) {
-        downstreamFinished = true;
-        Throwable theFailure = error;
-        error = null;
-        listener.onUpstreamFailure(theFailure);
-      }
+  private final Signal onUpstreamFailureSignal = () -> {
+    if (!downstreamFinished) {
+      downstreamFinished = true;
+      Throwable theFailure = error;
+      error = null;
+      listener.onUpstreamFailure(theFailure);
     }
   };
 }
