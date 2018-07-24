@@ -416,6 +416,10 @@ class BuiltGraph implements Executor {
           addStage(new OnErrorStage<>(BuiltGraph.this, inlet, outlet, ((Stage.OnError) stage).getConsumer()));
         } else if (stage instanceof Stage.OnTerminate) {
           addStage(new OnTerminateStage<>(BuiltGraph.this, inlet, outlet, ((Stage.OnTerminate) stage).getAction()));
+        } else if (stage instanceof Stage.OnErrorResume) {
+          addStage(new OnErrorResumeStage(BuiltGraph.this, inlet, outlet, ((Stage.OnErrorResume) stage).getFunction()));
+        } else if (stage instanceof Stage.OnErrorResumeWith) {
+          addStage(new OnErrorResumeWithStage(BuiltGraph.this, inlet, outlet, ((Stage.OnErrorResumeWith) stage).getFunction()));
         } else {
           throw new UnsupportedStageException(stage);
         }

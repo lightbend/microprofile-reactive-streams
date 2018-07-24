@@ -23,8 +23,12 @@ class OfStage<T> extends GraphStage implements OutletListener {
 
   @Override
   protected void postStart() {
-    if (!elements.hasNext()) {
-      outlet.complete();
+    try {
+      if (!elements.hasNext()) {
+        outlet.complete();
+      }
+    } catch (Exception e) {
+      outlet.fail(e);
     }
   }
 
