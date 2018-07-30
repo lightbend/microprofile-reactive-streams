@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # This should be set to the commit hash that is being tracked. Needed even if TRACKING_PR is set.
-TRACKING_COMMIT="41f41e2"
+TRACKING_COMMIT="886a91d5"
 # To track a particular pull request, put it's number here, otherwise comment it out.
-# TRACKING_PR="64"
+# TRACKING_PR="67"
 
 set -e
 

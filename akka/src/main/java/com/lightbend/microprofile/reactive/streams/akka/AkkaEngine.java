@@ -4,10 +4,11 @@
 
 package com.lightbend.microprofile.reactive.streams.akka;
 
-import akka.Done;
 import akka.NotUsed;
+import akka.japi.JavaPartialFunction;
 import akka.stream.Attributes;
 import akka.stream.Materializer;
+import akka.stream.SourceShape;
 import akka.stream.javadsl.*;
 import org.eclipse.microprofile.reactive.streams.CompletionRunner;
 import org.eclipse.microprofile.reactive.streams.CompletionSubscriber;
@@ -22,11 +23,7 @@ import org.eclipse.microprofile.reactive.streams.spi.UnsupportedStageException;
 import org.reactivestreams.Processor;
 import org.reactivestreams.Publisher;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.BiConsumer;
@@ -260,6 +257,26 @@ public class AkkaEngine implements ReactiveStreamsEngine {
     addFlowStage(Stage.OnComplete.class, (flow, stage) -> flow.via(TerminationPeeker.onComplete(stage.getAction())));
     addFlowStage(Stage.OnError.class, (flow, stage) -> flow.via(TerminationPeeker.onError(stage.getConsumer())));
     addFlowStage(Stage.OnTerminate.class, (flow, stage) -> flow.via(TerminationPeeker.onTerminate(stage.getAction())));
+    addFlowStage(Stage.OnErrorResume.class, (flow, stage) -> {
+      Function<Throwable, Object> function = (Function) stage.getFunction();
+      return flow.recover(new JavaPartialFunction<Throwable, Object>() {
+        @Override
+        public Object apply(Throwable x, boolean isCheck) throws Exception {
+          if (isCheck) return null;
+          else return function.apply(x);
+        }
+      });
+    });
+    addFlowStage(Stage.OnErrorResumeWith.class, (flow, stage) -> {
+      Function<Throwable, Graph> function = (Function) stage.getFunction();
+      return flow.recoverWithRetries(1, new JavaPartialFunction<Throwable, akka.stream.Graph<SourceShape<Object>, NotUsed>>() {
+        @Override
+        public akka.stream.Graph<SourceShape<Object>, NotUsed> apply(Throwable x, boolean isCheck) throws Exception {
+          if (isCheck) return null;
+          else return buildSource(function.apply(x));
+        }
+      });
+    });
 
     // Sinks
     addSinkStage(Stage.FindFirst.class, stage -> Sink.headOption());
