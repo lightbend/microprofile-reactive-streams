@@ -8,10 +8,7 @@ import akka.actor.ActorSystem;
 import akka.stream.ActorMaterializer;
 import akka.stream.Materializer;
 import org.eclipse.microprofile.reactive.streams.spi.ReactiveStreamsEngine;
-import org.eclipse.microprofile.reactive.streams.tck.CancelStageVerification;
-import org.eclipse.microprofile.reactive.streams.tck.FlatMapStageVerification;
 import org.eclipse.microprofile.reactive.streams.tck.ReactiveStreamsTck;
-import org.reactivestreams.tck.IdentityProcessorVerification;
 import org.reactivestreams.tck.TestEnvironment;
 import org.testng.annotations.AfterSuite;
 
@@ -39,10 +36,5 @@ public class AkkaReactiveStreamsTckTest extends ReactiveStreamsTck<AkkaEngine> {
     system = ActorSystem.create();
     materializer = ActorMaterializer.create(system);
     return new AkkaEngine(materializer);
-  }
-
-  @Override
-  protected boolean isEnabled(Object test) {
-    return true;
   }
 }
