@@ -197,7 +197,8 @@ public class AkkaEngine implements ReactiveStreamsEngine {
       return Source.from(stage.getElements());
     });
     addSourceStage(Stage.PublisherStage.class, stage -> Source.fromPublisher(stage.getRsPublisher()));
-    addSourceStage(Stage.Concat.class, stage -> buildSource(stage.getFirst()).concat(buildSource(stage.getSecond())));
+    addSourceStage(Stage.Concat.class, stage -> buildSource(stage.getFirst())
+        .concat(buildSource(stage.getSecond())));
     addSourceStage(Stage.Failed.class, stage -> Source.failed(stage.getError()));
 
     // Flows
@@ -281,35 +282,38 @@ public class AkkaEngine implements ReactiveStreamsEngine {
     // Sinks
     addSinkStage(Stage.FindFirst.class, stage -> Sink.headOption());
     addSinkStage(Stage.Collect.class, stage -> {
-      Collector collector = stage.getCollector();
-      BiConsumer accumulator = collector.accumulator();
-      Object firstContainer = collector.supplier().get();
-      if (firstContainer == null) {
-        firstContainer = NULL;
-      }
-      Sink<Object, CompletionStage<Object>> sink = Sink.fold(firstContainer, (resultContainer, in) -> {
-        if (resultContainer == NULL) {
-          accumulator.accept(null, in);
-        }
-        else {
-          accumulator.accept(resultContainer, in);
-        }
-        return resultContainer;
-      });
-      if (collector.characteristics().contains(Collector.Characteristics.IDENTITY_FINISH) && firstContainer != NULL) {
-        return sink;
-      }
-      else {
-        return sink.mapMaterializedValue(result -> result.thenApply(r -> {
-          if (r == NULL) {
-            return collector.finisher().apply(null);
-          }
-          else {
-            return collector.finisher().apply(r);
-          }
-        }));
-      }
-    });
+          Collector collector = stage.getCollector();
+          // Lazy inited sink so that exceptions thrown by supplier get propagated through completion stage, not directly.
+          return Sink.lazyInitAsync(() -> {
+            BiConsumer accumulator = collector.accumulator();
+            Object firstContainer = collector.supplier().get();
+            if (firstContainer == null) {
+              firstContainer = NULL;
+            }
+            return CompletableFuture.completedFuture(Sink.fold(firstContainer, (resultContainer, in) -> {
+              if (resultContainer == NULL) {
+                accumulator.accept(null, in);
+              } else {
+                accumulator.accept(resultContainer, in);
+              }
+              return resultContainer;
+            }));
+          }).mapMaterializedValue(asyncMaybeResult -> asyncMaybeResult.thenCompose(maybeResult -> {
+            CompletionStage<Object> resultContainer;
+            if (maybeResult.isPresent()) {
+              resultContainer = maybeResult.get();
+            } else {
+              resultContainer = CompletableFuture.completedFuture(collector.supplier().get());
+            }
+            return resultContainer.thenApply(container -> {
+              if (collector.characteristics().contains(Collector.Characteristics.IDENTITY_FINISH) && resultContainer != NULL) {
+                return container;
+              } else {
+                return collector.finisher().apply(container);
+              }
+            });
+          }));
+        });
     addSinkStage(Stage.SubscriberStage.class, stage ->
         Flow.create()
             .viaMat(new TerminationWatcher(), Keep.right())

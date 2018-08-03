@@ -269,9 +269,6 @@ class BuiltGraph implements Executor {
         }
       }
 
-      ports.addAll(builderPorts);
-      stages.addAll(builderStages);
-
       return this;
     }
 
@@ -284,7 +281,21 @@ class BuiltGraph implements Executor {
       for (Port port : builderPorts) {
         port.verifyReady();
       }
+      ports.addAll(builderPorts);
     }
+
+    /**
+     * Start the stages on this listener
+     */
+    private void startGraph() {
+      execute(() -> {
+        for (GraphStage stage : builderStages) {
+          stages.add(stage);
+          stage.postStart();
+        }
+      });
+    }
+
 
     private <T> SubStageInlet<T> inlet() {
       Objects.requireNonNull(lastInlet, "Not an inlet graph");
@@ -360,18 +371,8 @@ class BuiltGraph implements Executor {
           addStage(new OfStage(BuiltGraph.this, outlet,
               ((Stage.Of) stage).getElements()));
         } else if (stage instanceof Stage.Concat) {
-
-          // Use this builder to build each of the sub stages that are being concatenated as an inlet graph, and then
-          // capture the last inlet of each to pass to the concat stage.
-          buildGraph(((Stage.Concat) stage).getFirst(), Shape.INLET);
-          StageInlet firstInlet = lastInlet;
-          lastInlet = null;
-
-          buildGraph(((Stage.Concat) stage).getSecond(), Shape.INLET);
-          StageInlet secondInlet = lastInlet;
-          lastInlet = null;
-
-          addStage(new ConcatStage(BuiltGraph.this, firstInlet, secondInlet, outlet));
+          Stage.Concat concat = (Stage.Concat) stage;
+          addStage(new ConcatStage(BuiltGraph.this, buildSubInlet(concat.getFirst()), buildSubInlet(concat.getSecond()), outlet));
         } else if (stage instanceof Stage.PublisherStage) {
           addStage(new ConnectorStage(BuiltGraph.this, ((Stage.PublisherStage) stage).getRsPublisher(), subscriber));
         } else if (stage instanceof Stage.Failed) {
@@ -517,17 +518,6 @@ class BuiltGraph implements Executor {
     });
   }
 
-  /**
-   * Start the whole graph.
-   */
-  private void startGraph() {
-    execute(() -> {
-      for (GraphStage stage : stages) {
-        stage.postStart();
-      }
-    });
-  }
-
   private void streamFailure(Throwable error) {
     // todo handle better
     error.printStackTrace();
@@ -558,8 +548,6 @@ class BuiltGraph implements Executor {
     private final List<GraphStage> subStages;
     private final List<Port> subStagePorts;
 
-    private boolean started = false;
-
     private SubStageInlet(StageInlet<T> delegate, List<GraphStage> subStages, List<Port> subStagePorts) {
       this.delegate = delegate;
       this.subStages = subStages;
@@ -568,20 +556,24 @@ class BuiltGraph implements Executor {
 
     void start() {
       subStagePorts.forEach(Port::verifyReady);
-      started = true;
-      subStages.forEach(GraphStage::postStart);
+      ports.addAll(subStagePorts);
+      for (GraphStage stage: subStages) {
+        stages.add(stage);
+        stage.postStart();
+      }
     }
 
     private void shutdown() {
-      stages.removeAll(subStages);
-      ports.removeAll(subStagePorts);
+      // Do it in a signal, this ensures that if shutdown happens while something is iterating through
+      // the ports, we don't get a concurrent modification exception.
+      enqueueSignal(() -> {
+        stages.removeAll(subStages);
+        ports.removeAll(subStagePorts);
+      });
     }
 
     @Override
     public void pull() {
-      if (!started) {
-        throw new IllegalStateException("Pull before the sub stream has been started.");
-      }
       delegate.pull();
     }
 
@@ -602,17 +594,11 @@ class BuiltGraph implements Executor {
 
     @Override
     public void cancel() {
-      if (!started) {
-        throw new IllegalStateException("Cancel before the sub stream has been started.");
-      }
       delegate.cancel();
     }
 
     @Override
     public T grab() {
-      if (!started) {
-        throw new IllegalStateException("Grab before the sub stream has been started.");
-      }
       return delegate.grab();
     }
 
