@@ -33,12 +33,18 @@ class FlatMapCompletionStage<T, R> extends GraphStage implements InletListener {
     activeCompletionStage.whenCompleteAsync((result, error) -> {
       activeCompletionStage = null;
       if (!outlet.isClosed()) {
-        if (error == null) {
+        if (error == null && result != null) {
           outlet.push(result);
           if (inlet.isClosed()) {
             outlet.complete();
           }
         } else {
+          // If error is null, then that means the result was null, which is not allowed.
+          // We explicitly test for that rather than let outlet.push handle it for us, since
+          // this callback won't result in cleanup being done for this stage.
+          if (error == null) {
+            error = new NullPointerException("Element must not be null");
+          }
           outlet.fail(error);
           if (!inlet.isClosed()) {
             inlet.cancel();
