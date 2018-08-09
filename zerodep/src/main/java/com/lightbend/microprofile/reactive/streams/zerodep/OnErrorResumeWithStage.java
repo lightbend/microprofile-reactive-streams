@@ -38,7 +38,7 @@ class OnErrorResumeWithStage<T> extends GraphStage implements InletListener {
     try {
       Graph graph = function.apply(error);
 
-      BuiltGraph.SubStageInlet<T> newInlet = createSubInlet(graph);
+      SubStageInlet<T> newInlet = createSubInlet(graph);
 
       // Wire the new inlet directly to/from the outlet, this stage no longer has any involvement in the stream.
       newInlet.forwardTo(outlet);

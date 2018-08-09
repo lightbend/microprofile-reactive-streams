@@ -13,7 +13,7 @@ class FlatMapStage<T, R> extends GraphStage implements InletListener, OutletList
   private final StageOutlet<R> outlet;
   private final Function<T, Graph> mapper;
 
-  private BuiltGraph.SubStageInlet<R> substream;
+  private SubStageInlet<R> substream;
 
   FlatMapStage(BuiltGraph builtGraph, StageInlet<T> inlet, StageOutlet<R> outlet, Function<T, Graph> mapper) {
     super(builtGraph);

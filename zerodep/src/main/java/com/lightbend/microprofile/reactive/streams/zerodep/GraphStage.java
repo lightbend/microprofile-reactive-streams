@@ -27,7 +27,7 @@ abstract class GraphStage {
    * @param graph The graph.
    * @return The inlet.
    */
-  protected <T> BuiltGraph.SubStageInlet<T> createSubInlet(Graph graph) {
+  protected <T> SubStageInlet<T> createSubInlet(Graph graph) {
     return builtGraph.buildSubInlet(graph);
   }
 

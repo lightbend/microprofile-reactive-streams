@@ -165,10 +165,14 @@ public class AkkaEngine implements ReactiveStreamsEngine {
     throw new IllegalStateException("Graph did not have terminal stage");
   }
 
+  // For efficient mapping of stages to translators to Akka streams, we use these maps.
   private final Map<Class<? extends Stage>, Function<Stage, Source>> sourceStages = new HashMap<>();
   private final Map<Class<? extends Stage>, BiFunction<Flow, Stage, Flow>> flowStages = new HashMap<>();
   private final Map<Class<? extends Stage>, Function<Stage, Sink>> sinkStages = new HashMap<>();
 
+  // These helper functions primarily exist to avoid casting, since the type of S is inferred by the
+  // compiler using the class passed as the first parameter, the lambda passed as the second parameter
+  // allows the stage to be handled as that class.
   private <S extends Stage> void addSourceStage(Class<S> stageClass, Function<S, Source> factory) {
     sourceStages.put(stageClass, (Function) factory);
   }
@@ -181,6 +185,7 @@ public class AkkaEngine implements ReactiveStreamsEngine {
     sinkStages.put(stageClass, (Function) factory);
   }
 
+  // Initializer
   {
     // Sources
     addSourceStage(Stage.Of.class, stage -> {

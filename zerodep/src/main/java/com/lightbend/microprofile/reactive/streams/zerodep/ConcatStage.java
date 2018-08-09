@@ -6,11 +6,11 @@ package com.lightbend.microprofile.reactive.streams.zerodep;
 
 public class ConcatStage<T> extends GraphStage implements InletListener, OutletListener {
 
-  private final BuiltGraph.SubStageInlet<T> first;
-  private final BuiltGraph.SubStageInlet<T> second;
+  private final SubStageInlet<T> first;
+  private final SubStageInlet<T> second;
   private final StageOutlet<T> outlet;
 
-  public ConcatStage(BuiltGraph builtGraph, BuiltGraph.SubStageInlet<T> first, BuiltGraph.SubStageInlet<T> second, StageOutlet<T> outlet) {
+  public ConcatStage(BuiltGraph builtGraph, SubStageInlet<T> first, SubStageInlet<T> second, StageOutlet<T> outlet) {
     super(builtGraph);
     this.first = first;
     this.second = second;
