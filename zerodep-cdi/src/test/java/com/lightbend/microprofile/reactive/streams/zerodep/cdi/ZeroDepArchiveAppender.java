@@ -3,6 +3,7 @@
  */
 package com.lightbend.microprofile.reactive.streams.zerodep.cdi;
 
+import com.beust.jcommander.JCommander;
 import com.lightbend.microprofile.reactive.streams.zerodep.ReactiveStreamsEngineImpl;
 import org.eclipse.microprofile.reactive.streams.ReactiveStreams;
 import org.jboss.arquillian.container.test.spi.client.deployment.AuxiliaryArchiveAppender;
@@ -24,6 +25,8 @@ public class ZeroDepArchiveAppender implements AuxiliaryArchiveAppender {
         // When I tried to add another application scoped bean that @Produces this, it failed with
         // an ambiguous dependency because both that, and the one that Thorntail automatically
         // created, existed. I have no idea how that's happening.
-        .addPackages(true, ReactiveStreamsEngineImpl.class.getPackage());
+        .addPackages(true, ReactiveStreamsEngineImpl.class.getPackage())
+        // Because TestNG depends on it but this old verison of Arquillian doesn't bring it in.
+        .addPackages(true, JCommander.class.getPackage());
   }
 }
