@@ -13,14 +13,14 @@
     <packaging>pom</packaging>
     <name>Lightbend MicroProfile Reactive Streams Operators</name>
     <description>Lightbend MicroProfile Reactive Streams Operators :: Parent POM</description>
-    <url>https://github.com/lightbend/lightbend-microprofile-streams</url>
+    <url>https://github.com/lightbend/lightbend-microprofile-reactive-streams</url>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
 
-        <microprofile.reactive.streams.version>1.0-SNAPSHOT</microprofile.reactive.streams.version>
+        <microprofile.reactive.streams.version>1.0-M1</microprofile.reactive.streams.version>
         <akka.version>2.5.14</akka.version>
     </properties>
 
@@ -104,6 +104,20 @@
         </dependencies>
     </dependencyManagement>
 
+    <distributionManagement>
+        <repository>
+            <id>ossrh</id>
+            <name>Sonatype OSSRH - Release Staging Area</name>
+            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+        </repository>
+        <snapshotRepository>
+            <id>ossrh</id>
+            <name>Sonatype OSSRH Snapshots</name>
+            <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+            <uniqueVersion>true</uniqueVersion>
+        </snapshotRepository>
+    </distributionManagement>
+
     <build>
         <pluginManagement>
             <plugins>
@@ -122,11 +136,71 @@
                     <artifactId>maven-javadoc-plugin</artifactId>
                     <version>2.10.4</version>
                 </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-release-plugin</artifactId>
+                    <version>2.5.3</version>
+                </plugin>
             </plugins>
         </pluginManagement>
     </build>
 
     <profiles>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.sonatype.plugins</groupId>
+                        <artifactId>nexus-staging-maven-plugin</artifactId>
+                        <version>1.6.3</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <nexusUrl>https://oss.sonatype.org/</nexusUrl>
+                            <serverId>ossrh</serverId>
+                            <autoReleaseAfterClose>true</autoReleaseAfterClose>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <!-- This allows custom deployments to arbitrary repositories,
                  these properties are probably best set with profiles in

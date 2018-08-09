@@ -38,7 +38,17 @@ import java.util.concurrent.ForkJoinPool;
  */
 public class AkkaEngineProvider implements ReactiveStreamsEngine {
 
+  /**
+   * This comes from Guava. If we move to JDK9 as a minimum required version, then this can be replaced with the JDK9
+   * cleaner API.
+   */
   private static final FinalizableReferenceQueue frq = new FinalizableReferenceQueue();
+
+  /**
+   * We need to hold references to any FinalizablePhantomReference objects that we create, to ensure that they
+   * themselves don't get garbage collected. Ignore any IDE warnings that say that this set is updated but never
+   * queried, the garbage collector queries it and that's all that matters.
+   */
   private static final Set<Reference<?>> references = Sets.newConcurrentHashSet();
 
   private static volatile WeakReference<AkkaEngine> cachedEngine = null;
