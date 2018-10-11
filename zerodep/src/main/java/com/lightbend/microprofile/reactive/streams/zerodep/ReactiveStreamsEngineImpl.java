@@ -4,9 +4,9 @@
 
 package com.lightbend.microprofile.reactive.streams.zerodep;
 
-import org.eclipse.microprofile.reactive.streams.CompletionSubscriber;
 import org.eclipse.microprofile.reactive.streams.spi.Graph;
 import org.eclipse.microprofile.reactive.streams.spi.ReactiveStreamsEngine;
+import org.eclipse.microprofile.reactive.streams.spi.SubscriberWithCompletionStage;
 import org.eclipse.microprofile.reactive.streams.spi.UnsupportedStageException;
 import org.reactivestreams.Processor;
 import org.reactivestreams.Publisher;
@@ -24,7 +24,7 @@ public class ReactiveStreamsEngineImpl implements ReactiveStreamsEngine {
   }
 
   @Override
-  public <T, R> CompletionSubscriber<T, R> buildSubscriber(Graph graph) throws UnsupportedStageException {
+  public <T, R> SubscriberWithCompletionStage<T, R> buildSubscriber(Graph graph) throws UnsupportedStageException {
     return BuiltGraph.buildSubscriber(ForkJoinPool.commonPool(), graph);
   }
 

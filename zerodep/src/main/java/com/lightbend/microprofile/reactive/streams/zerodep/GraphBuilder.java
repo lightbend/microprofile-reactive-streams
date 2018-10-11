@@ -3,9 +3,9 @@
  */
 package com.lightbend.microprofile.reactive.streams.zerodep;
 
-import org.eclipse.microprofile.reactive.streams.CompletionSubscriber;
 import org.eclipse.microprofile.reactive.streams.spi.Graph;
 import org.eclipse.microprofile.reactive.streams.spi.Stage;
+import org.eclipse.microprofile.reactive.streams.spi.SubscriberWithCompletionStage;
 import org.eclipse.microprofile.reactive.streams.spi.UnsupportedStageException;
 import org.reactivestreams.Processor;
 import org.reactivestreams.Publisher;
@@ -14,7 +14,6 @@ import org.reactivestreams.Subscriber;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.function.Function;
 
 /**
  * A builder.
@@ -74,7 +73,7 @@ class GraphBuilder {
     // Special case - an empty graph. This should result in an identity processor.
     // To build this, we use a single map stage with the identity function.
     if (graphStages.isEmpty()) {
-      graphStages = Collections.singleton(new Stage.Map(Function.identity()));
+      graphStages = Collections.singleton(IdentityMap.INSTANCE);
     }
 
     // In the loop below, we need to compare each pair of consecutive stages, to work out what sort of inlet/outlet
@@ -113,7 +112,7 @@ class GraphBuilder {
           } else if (stage instanceof Stage.ProcessorStage) {
             firstSubscriber = ((Stage.ProcessorStage) stage).getRsProcessor();
           }
-        } else if (stage.hasInlet()) {
+        } else if (shape.hasInlet()) {
           // Otherwise if it has an inlet, we need to create a subscriber inlet as the first subscriber.
           SubscriberInlet inlet = addPort(createSubscriberInlet());
           currentInlet = inlet;
@@ -175,7 +174,7 @@ class GraphBuilder {
             lastPublisher = ((Stage.ProcessorStage) previousStage).getRsProcessor();
           }
         }
-      } else if (previousStage.hasOutlet()) {
+      } else if (shape.hasOutlet()) {
         StageOutlet outlet;
         if (shape == BuiltGraph.Shape.INLET) {
           // We need to produce an inlet, and the last stage has an outlet, so create an outlet inlet for that
@@ -245,7 +244,7 @@ class GraphBuilder {
     return lastPublisher;
   }
 
-  CompletionSubscriber subscriber() {
+  SubscriberWithCompletionStage subscriber() {
     Objects.requireNonNull(firstSubscriber, "Not a subscriber graph");
     Objects.requireNonNull(result, "Not a subscriber graph");
     assert lastPublisher == null;
@@ -254,7 +253,7 @@ class GraphBuilder {
     verifyReady();
     startGraph();
 
-    return CompletionSubscriber.of(firstSubscriber, result);
+    return new SubscriberWithCompletionStageImpl(firstSubscriber, result);
   }
 
   CompletionStage completion() {
@@ -292,12 +291,41 @@ class GraphBuilder {
   private void addStage(Stage stage, StageInlet inlet, Publisher publisher, StageOutlet outlet,
       Subscriber subscriber) {
 
-    StageApplier stageApplier = STAGE_APPLIERS.get(stage.getClass());
+    StageApplier stageApplier =lookupStage(stage.getClass());
     if (stageApplier == null) {
       throw new UnsupportedStageException(stage);
     } else {
       stageApplier.apply(this, stage, inlet, publisher, outlet, subscriber);
     }
+  }
+
+  private static StageApplier lookupStage(Class<?> clazz) {
+    // Breadth first search on implemented interfaces, for the core implementation, in all cases, the first interface
+    // encountered will be the one we're looking for, and so this should return without having to recurse or do any
+    // more than one lookup on the map, only if a different implementation of the API is used will this ever be different.
+    for (Class<?> inter : clazz.getInterfaces()) {
+      StageApplier applier = STAGE_APPLIERS.get(inter);
+      if (applier != null) {
+        return applier;
+      }
+    }
+
+    if (clazz.getSuperclass() != null) {
+      StageApplier applier = lookupStage(clazz.getSuperclass());
+      if (applier != null) {
+        return applier;
+      }
+    }
+
+    for (Class<?> inter : clazz.getInterfaces()) {
+      StageApplier applier = lookupStage(inter);
+      if (applier != null) {
+        return applier;
+      }
+    }
+
+    return null;
+
   }
 
   private SubscriberInlet createSubscriberInlet() {
@@ -346,7 +374,7 @@ class GraphBuilder {
 
     // publishers
     stages.add(Stage.Of.class, (builder, stage, inlet, publisher, outlet, subscriber) ->
-      builder.addStage(new OfStage(builder.builtGraph, outlet, stage.getElements())));
+        builder.addStage(new OfStage(builder.builtGraph, outlet, stage.getElements())));
     stages.add(Stage.Concat.class, (builder, stage, inlet, publisher, outlet, subscriber) ->
         builder.addStage(new ConcatStage(builder.builtGraph, builder.builtGraph.buildSubInlet(stage.getFirst()),
             builder.builtGraph.buildSubInlet(stage.getSecond()), outlet)));
@@ -354,6 +382,10 @@ class GraphBuilder {
         builder.addStage(new ConnectorStage(builder.builtGraph, stage.getRsPublisher(), subscriber)));
     stages.add(Stage.Failed.class, (builder, stage, inlet, publisher, outlet, subscriber) ->
         builder.addStage(new FailedStage(builder.builtGraph, outlet, stage.getError())));
+    stages.add(Stage.FromCompletionStage.class, (builder, stage, inlet, publisher, outlet, subscriber) ->
+        builder.addStage(new FromCompletionStage(builder.builtGraph, outlet, stage.getCompletionStage())));
+    stages.add(Stage.FromCompletionStageNullable.class, (builder, stage, inlet, publisher, outlet, subscriber) ->
+        builder.addStage(new FromCompletionStageNullableStage(builder.builtGraph, outlet, stage.getCompletionStage())));
 
     // processors
     stages.add(Stage.Map.class, (builder, stage, inlet, publisher, outlet, subscriber) ->
