@@ -1,7 +1,7 @@
 language: java
 
-#before_install:
-#  - bin/buildDeps.sh
+before_install:
+  - bin/buildDeps.sh
 
 cache:
   directories:

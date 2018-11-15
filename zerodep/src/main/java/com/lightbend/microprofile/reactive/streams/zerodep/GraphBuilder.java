@@ -42,6 +42,11 @@ class GraphBuilder {
    */
   private StageInlet lastInlet;
   /**
+   * The last outlet for the graph. Is this graph has an outlet shape, then by the time the graph is ready to be built,
+   * this will be non null.
+   */
+  private StageOutlet firstOutlet;
+  /**
    * The result for the graph. If this graph has a subscriber or closed shape, then by the time the graph is ready to
    * be built, this will be non null.
    */
@@ -104,7 +109,18 @@ class GraphBuilder {
 
       // If this is the first stage in the graph
       if (previousStage == null) {
-        if (isSubscriber(stage)) {
+        if (shape == BuiltGraph.Shape.OUTLET) {
+          result = new CompletableFuture();
+          if (isSubscriber(stage)) {
+            PublisherOutlet outlet = addPort(new PublisherOutlet<>(builtGraph));
+            firstOutlet = outlet;
+            currentPublisher = outlet;
+          } else {
+            StageOutletInlet outletInlet = addPort(new StageOutletInlet(builtGraph));
+            firstOutlet = outletInlet.new Outlet();
+            currentInlet = outletInlet.new Inlet();
+          }
+        } else if (isSubscriber(stage)) {
           // It's a subscriber, we don't create an inlet, instead we use it directly as the first subscriber
           // of this graph.
           if (stage instanceof Stage.SubscriberStage) {
@@ -223,13 +239,23 @@ class GraphBuilder {
   }
 
 
-  <T> SubStageInlet<T> inlet() {
+  <T> SubStageInlet<T> subInlet() {
     Objects.requireNonNull(lastInlet, "Not an inlet graph");
     assert result == null;
     assert firstSubscriber == null;
     assert lastPublisher == null;
+    assert firstOutlet == null;
 
     return new SubStageInlet(builtGraph, lastInlet, builderStages, builderPorts);
+  }
+
+  <T> SubStageOutlet<T> subOutlet() {
+    Objects.requireNonNull(firstOutlet, "Not an outlet graph");
+    assert firstSubscriber == null;
+    assert lastPublisher == null;
+    assert lastInlet == null;
+
+    return new SubStageOutlet<>(builtGraph, firstOutlet, builderStages, builderPorts);
   }
 
   Publisher publisher() {
@@ -237,6 +263,7 @@ class GraphBuilder {
     assert result == null;
     assert firstSubscriber == null;
     assert lastInlet == null;
+    assert firstOutlet == null;
 
     verifyReady();
     startGraph();
@@ -249,6 +276,7 @@ class GraphBuilder {
     Objects.requireNonNull(result, "Not a subscriber graph");
     assert lastPublisher == null;
     assert lastInlet == null;
+    assert firstOutlet == null;
 
     verifyReady();
     startGraph();
@@ -261,6 +289,7 @@ class GraphBuilder {
     assert lastPublisher == null;
     assert firstSubscriber == null;
     assert lastInlet == null;
+    assert firstOutlet == null;
 
     verifyReady();
     startGraph();
@@ -272,6 +301,8 @@ class GraphBuilder {
     Objects.requireNonNull(lastPublisher, "Not a processor graph");
     Objects.requireNonNull(firstSubscriber, "Not a processor graph");
     assert result == null;
+    assert lastInlet == null;
+    assert firstOutlet == null;
 
     verifyReady();
     startGraph();
@@ -425,6 +456,10 @@ class GraphBuilder {
         builder.addStage(new OnErrorResumeStage(builder.builtGraph, inlet, outlet, stage.getFunction())));
     stages.add(Stage.OnErrorResumeWith.class, (builder, stage, inlet, publisher, outlet, subscriber) ->
         builder.addStage(new OnErrorResumeWithStage(builder.builtGraph, inlet, outlet, stage.getFunction())));
+    stages.add(Stage.Coupled.class, (builder, stage, inlet, publisher, outlet, subscriber) ->
+        builder.addStage(new CoupledStage(builder.builtGraph, inlet,
+            builder.builtGraph.buildSubOutlet(stage.getSubscriber()),
+            builder.builtGraph.buildSubInlet(stage.getPublisher()), outlet))     );
 
     // subscribers
     stages.add(Stage.Collect.class, (builder, stage, inlet, publisher, outlet, subscriber) ->
