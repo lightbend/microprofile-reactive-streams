@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # This should be set to the commit hash that is being tracked. Needed even if TRACKING_PR is set.
-TRACKING_COMMIT="0d0c4f50"
+TRACKING_COMMIT="6387275"
 # To track a particular pull request, put it's number here, otherwise comment it out.
-# TRACKING_PR="67"
+# TRACKING_PR="84"
 
 set -e
 
@@ -25,4 +25,4 @@ fi
 
 git checkout "${TRACKING_COMMIT}"
 
-mvn -am -pl streams/api,streams/tck clean install -Dmaven.test.skip -Drat.skip=true -Dcheckstyle.skip=true -Dmaven.javadoc.skip=true -Dasciidoctor.skip=true
+mvn -am -pl streams/api,streams/tck,streams/tck-arquillian clean install -Dmaven.test.skip -Drat.skip=true -Dcheckstyle.skip=true -Dmaven.javadoc.skip=true -Dasciidoctor.skip=true

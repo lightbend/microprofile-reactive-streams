@@ -61,6 +61,7 @@
     <modules>
         <module>akka</module>
         <module>zerodep</module>
+        <module>zerodep-cdi</module>
     </modules>
 
     <dependencyManagement>
@@ -78,6 +79,11 @@
             <dependency>
                 <groupId>org.eclipse.microprofile.reactive.streams</groupId>
                 <artifactId>microprofile-reactive-streams-operators-tck</artifactId>
+                <version>${microprofile.reactive.streams.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.microprofile.reactive.streams</groupId>
+                <artifactId>microprofile-reactive-streams-operators-tck-arquillian</artifactId>
                 <version>${microprofile.reactive.streams.version}</version>
             </dependency>
             <dependency>
