@@ -5,7 +5,6 @@
 package com.lightbend.microprofile.reactive.streams.zerodep;
 
 
-import org.eclipse.microprofile.reactive.streams.CompletionSubscriber;
 import org.eclipse.microprofile.reactive.streams.spi.Graph;
 import org.eclipse.microprofile.reactive.streams.spi.SubscriberWithCompletionStage;
 import org.reactivestreams.Processor;
