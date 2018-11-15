@@ -5,8 +5,8 @@
 package com.lightbend.microprofile.reactive.streams.zerodep;
 
 
-import org.eclipse.microprofile.reactive.streams.CompletionSubscriber;
 import org.eclipse.microprofile.reactive.streams.spi.Graph;
+import org.eclipse.microprofile.reactive.streams.spi.SubscriberWithCompletionStage;
 import org.reactivestreams.Processor;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
@@ -58,7 +58,7 @@ class BuiltGraph implements Executor {
   /**
    * Build a subscriber graph.
    */
-  static <T, R> CompletionSubscriber<T, R> buildSubscriber(Executor mutex, Graph graph) {
+  static <T, R> SubscriberWithCompletionStage<T, R> buildSubscriber(Executor mutex, Graph graph) {
     return newBuilder(mutex).buildGraph(graph, Shape.SUBSCRIBER).subscriber();
   }
 
@@ -87,7 +87,23 @@ class BuiltGraph implements Executor {
    * Used to indicate the shape of the graph we're building.
    */
   enum Shape {
-    PUBLISHER, SUBSCRIBER, PROCESSOR, CLOSED, INLET
+    PUBLISHER(false, true), SUBSCRIBER(true, false), PROCESSOR(true, true), CLOSED(false, false), INLET(false, true);
+
+    private final boolean hasInlet;
+    private final boolean hasOutlet;
+
+    Shape(boolean hasInlet, boolean hasOutlet) {
+      this.hasInlet = hasInlet;
+      this.hasOutlet = hasOutlet;
+    }
+
+    boolean hasInlet() {
+      return hasInlet;
+    }
+
+    boolean hasOutlet() {
+      return hasOutlet;
+    }
   }
 
   /**

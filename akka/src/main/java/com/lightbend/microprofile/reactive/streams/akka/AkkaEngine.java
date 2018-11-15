@@ -10,16 +10,8 @@ import akka.stream.Attributes;
 import akka.stream.Materializer;
 import akka.stream.SourceShape;
 import akka.stream.javadsl.*;
-import org.eclipse.microprofile.reactive.streams.CompletionRunner;
-import org.eclipse.microprofile.reactive.streams.CompletionSubscriber;
-import org.eclipse.microprofile.reactive.streams.GraphAccessor;
-import org.eclipse.microprofile.reactive.streams.ProcessorBuilder;
-import org.eclipse.microprofile.reactive.streams.PublisherBuilder;
-import org.eclipse.microprofile.reactive.streams.SubscriberBuilder;
-import org.eclipse.microprofile.reactive.streams.spi.Graph;
-import org.eclipse.microprofile.reactive.streams.spi.ReactiveStreamsEngine;
-import org.eclipse.microprofile.reactive.streams.spi.Stage;
-import org.eclipse.microprofile.reactive.streams.spi.UnsupportedStageException;
+import org.eclipse.microprofile.reactive.streams.*;
+import org.eclipse.microprofile.reactive.streams.spi.*;
 import org.reactivestreams.Processor;
 import org.reactivestreams.Publisher;
 
@@ -61,7 +53,7 @@ public class AkkaEngine implements ReactiveStreamsEngine {
    * Convert a publisher builder to a source.
    */
   public <T> Source<T, NotUsed> buildSource(PublisherBuilder<T> publisher) throws UnsupportedStageException {
-    return buildSource(GraphAccessor.buildGraphFor(publisher));
+    return buildSource(((ToGraphable) publisher).toGraph());
   }
 
   private <T> Source<T, NotUsed> buildSource(Graph graph) throws UnsupportedStageException {
@@ -80,31 +72,25 @@ public class AkkaEngine implements ReactiveStreamsEngine {
   }
 
   @Override
-  public <T, R> CompletionSubscriber<T, R> buildSubscriber(Graph graph) throws UnsupportedStageException {
-    return (CompletionSubscriber<T, R>) materialize(Source.asSubscriber()
-        .toMat(buildSink(graph), (subscriber, result) ->
-            CompletionSubscriber.of(subscriber, result)));
+  public <T, R> SubscriberWithCompletionStage<T, R> buildSubscriber(Graph graph) throws UnsupportedStageException {
+    return materialize(Source.<T>asSubscriber()
+        .toMat(this.<T, R>buildSink(graph), SubscriberWithCompletionStageImpl::new));
   }
 
   /**
    * Convert a subscriber builder to a sink.
    */
   public <T, R> Sink<T, CompletionStage<R>> buildSink(SubscriberBuilder<T, R> subscriber) throws UnsupportedStageException {
-    return buildSink(GraphAccessor.buildGraphFor(subscriber));
+    return buildSink(((ToGraphable) subscriber).toGraph());
   }
 
   private <T, R> Sink<T, CompletionStage<R>> buildSink(Graph graph) throws UnsupportedStageException {
     Flow flow = Flow.create();
-    for (Stage stage : graph.getStages()) {
-      if (stage.hasOutlet()) {
-        flow = applyStage(flow, stage);
-      }
-      else {
-        return flow.toMat(toSink(stage), Keep.right());
-      }
+    Iterator<Stage> iter = graph.getStages().iterator();
+    for (int i = 0; i < graph.getStages().size() - 1; i++) {
+      flow = applyStage(flow, iter.next());
     }
-
-    throw new IllegalStateException("Graph did not have terminal stage");
+    return flow.toMat(toSink(iter.next()), Keep.right());
   }
 
   @Override
@@ -124,7 +110,7 @@ public class AkkaEngine implements ReactiveStreamsEngine {
    * Convert a processor builder to a flow.
    */
   public <T, R> Flow<T, R, NotUsed> buildFlow(ProcessorBuilder<T, R> processor) throws UnsupportedStageException {
-    return buildFlow(GraphAccessor.buildGraphFor(processor));
+    return buildFlow(((ToGraphable) processor).toGraph());
   }
 
   private <T, R> Flow<T, R, NotUsed> buildFlow(Graph graph) throws UnsupportedStageException {
@@ -144,25 +130,17 @@ public class AkkaEngine implements ReactiveStreamsEngine {
    * Convert a completion builder to a runnable graph.
    */
   public <T> RunnableGraph<CompletionStage<T>> buildCompletion(CompletionRunner<T> completion) throws UnsupportedStageException {
-    return buildRunnableGraph(GraphAccessor.buildGraphFor(completion));
+    return buildRunnableGraph(((ToGraphable) completion).toGraph());
   }
 
   private <T> RunnableGraph<CompletionStage<T>> buildRunnableGraph(Graph graph) throws UnsupportedStageException {
-    Source source = null;
+    Iterator<Stage> iter = graph.getStages().iterator();
+    Source source = toSource(iter.next());
     Flow flow = Flow.create();
-    for (Stage stage : graph.getStages()) {
-      if (source == null) {
-        source = toSource(stage);
-      }
-      else if (stage.hasOutlet()) {
-        flow = applyStage(flow, stage);
-      }
-      else {
-        return source.via(flow).toMat(toSink(stage), Keep.right());
-      }
+    for (int i = 1; i < graph.getStages().size() - 1; i++) {
+      flow = applyStage(flow, iter.next());
     }
-
-    throw new IllegalStateException("Graph did not have terminal stage");
+    return source.via(flow).toMat(toSink(iter.next()), Keep.right());
   }
 
   // For efficient mapping of stages to translators to Akka streams, we use these maps.
@@ -205,6 +183,12 @@ public class AkkaEngine implements ReactiveStreamsEngine {
     addSourceStage(Stage.Concat.class, stage -> buildSource(stage.getFirst())
         .concat(buildSource(stage.getSecond())));
     addSourceStage(Stage.Failed.class, stage -> Source.failed(stage.getError()));
+    addSourceStage(Stage.FromCompletionStage.class, stage -> Source.fromCompletionStage(stage.getCompletionStage()));
+    addSourceStage(Stage.FromCompletionStageNullable.class, stage ->
+        Source.fromCompletionStage(stage.getCompletionStage().thenApply(v -> {
+          if (v == null) return NULL;
+          else return v;
+        })).filter(v -> v != NULL));
 
     // Flows
     addFlowStage(Stage.Map.class, (flow, stage) -> {
@@ -327,11 +311,7 @@ public class AkkaEngine implements ReactiveStreamsEngine {
   }
 
   private Source toSource(Stage stage) {
-    if (stage.hasInlet() || !stage.hasOutlet()) {
-      throw new IllegalArgumentException("Cannot create source stage for stage of this shape: " + stage);
-    }
-
-    Function<Stage, Source> factory = sourceStages.get(stage.getClass());
+    Function<Stage, Source> factory = lookupStage(sourceStages, stage.getClass());
 
     if (factory == null) {
       throw new UnsupportedStageException(stage);
@@ -342,11 +322,7 @@ public class AkkaEngine implements ReactiveStreamsEngine {
   }
 
   private Flow applyStage(Flow flow, Stage stage) {
-    if (!stage.hasInlet() || !stage.hasOutlet()) {
-      throw new IllegalArgumentException("Cannot create flow stage for stage of this shape: " + stage);
-    }
-
-    BiFunction<Flow, Stage, Flow> flowStage = flowStages.get(stage.getClass());
+    BiFunction<Flow, Stage, Flow> flowStage = lookupStage(flowStages, stage.getClass());
 
     if (flowStage == null) {
       throw new UnsupportedStageException(stage);
@@ -357,11 +333,7 @@ public class AkkaEngine implements ReactiveStreamsEngine {
   }
 
   private Sink toSink(Stage stage) {
-    if (!stage.hasInlet() || stage.hasOutlet()) {
-      throw new IllegalArgumentException("Cannot create sink stage for stage of this shape: " + stage);
-    }
-
-    Function<Stage, Sink> sinkStage = sinkStages.get(stage.getClass());
+    Function<Stage, Sink> sinkStage = lookupStage(sinkStages, stage.getClass());
 
     if (sinkStage == null) {
       throw new UnsupportedStageException(stage);
@@ -371,6 +343,33 @@ public class AkkaEngine implements ReactiveStreamsEngine {
     }
   }
 
+  private <T> T lookupStage(Map<Class<? extends Stage>, T> stages, Class<?> clazz) {
+    // Breadth first search on implemented interfaces, for the core implementation, in all cases, the first interface
+    // encountered will be the one we're looking for, and so this should return without having to recurse or do any
+    // more than one lookup on the map, only if a different implementation of the API is used will this ever be different.
+    for (Class<?> inter: clazz.getInterfaces()) {
+      T stage = stages.get(inter);
+      if (stage != null) {
+        return stage;
+      }
+    }
+
+    if (clazz.getSuperclass() != null) {
+      T stage = lookupStage(stages, clazz.getSuperclass());
+      if (stage != null) {
+        return stage;
+      }
+    }
+
+    for (Class<?> inter: clazz.getInterfaces()) {
+      T stage = lookupStage(stages, inter);
+      if (stage != null) {
+        return stage;
+      }
+    }
+
+    return null;
+  }
 
   private <T> T materialize(RunnableGraph<T> graph) {
     return graph.addAttributes(akkaEngineAttributes).run(materializer);

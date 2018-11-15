@@ -19,7 +19,7 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
 
-        <microprofile.reactive.streams.version>1.0-M1</microprofile.reactive.streams.version>
+        <microprofile.reactive.streams.version>1.0-RC2</microprofile.reactive.streams.version>
         <akka.version>2.5.14</akka.version>
     </properties>
 
@@ -68,6 +68,11 @@
             <dependency>
                 <groupId>org.eclipse.microprofile.reactive.streams</groupId>
                 <artifactId>microprofile-reactive-streams-operators</artifactId>
+                <version>${microprofile.reactive.streams.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.microprofile.reactive.streams</groupId>
+                <artifactId>microprofile-reactive-streams-operators-core</artifactId>
                 <version>${microprofile.reactive.streams.version}</version>
             </dependency>
             <dependency>
@@ -149,6 +154,17 @@
             </plugins>
         </pluginManagement>
     </build>
+
+    <repositories>
+        <repository>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+            <id>bintray-jroper-maven</id>
+            <name>bintray</name>
+            <url>https://dl.bintray.com/jroper/maven</url>
+        </repository>
+    </repositories>
 
     <profiles>
         <profile>

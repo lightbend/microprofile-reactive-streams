@@ -18,7 +18,7 @@
     <dependencies>
         <dependency>
             <groupId>org.eclipse.microprofile.reactive.streams</groupId>
-            <artifactId>microprofile-reactive-streams-operators</artifactId>
+            <artifactId>microprofile-reactive-streams-operators-core</artifactId>
         </dependency>
         <dependency>
             <groupId>com.typesafe.akka</groupId>
