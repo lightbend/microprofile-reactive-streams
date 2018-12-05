@@ -267,6 +267,9 @@ public class AkkaEngine implements ReactiveStreamsEngine {
         }
       });
     });
+    addFlowStage(Stage.Coupled.class, (flow, stage) ->
+        flow.via(Flow.fromSinkAndSourceCoupled(buildSink(stage.getSubscriber()), buildSource(stage.getPublisher())))
+    );
 
     // Sinks
     addSinkStage(Stage.FindFirst.class, stage -> Sink.headOption());

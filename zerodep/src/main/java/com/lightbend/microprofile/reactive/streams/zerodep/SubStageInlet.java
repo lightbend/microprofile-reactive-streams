@@ -10,35 +10,12 @@ import java.util.List;
  * <p>
  * This stage captures close signals, and removes the stages and ports from the graph so as to avoid leaking memory.
  */
-final class SubStageInlet<T> implements StageInlet<T> {
-  private final BuiltGraph builtGraph;
+final class SubStageInlet<T> extends SubStagePort implements StageInlet<T> {
   private final StageInlet<T> delegate;
-  private final List<GraphStage> subStages;
-  private final List<Port> subStagePorts;
 
   SubStageInlet(BuiltGraph builtGraph, StageInlet<T> delegate, List<GraphStage> subStages, List<Port> subStagePorts) {
-    this.builtGraph = builtGraph;
+    super(builtGraph, subStages, subStagePorts);
     this.delegate = delegate;
-    this.subStages = subStages;
-    this.subStagePorts = subStagePorts;
-  }
-
-  void start() {
-    subStagePorts.forEach(Port::verifyReady);
-    builtGraph.addPorts(subStagePorts);
-    for (GraphStage stage: subStages) {
-      builtGraph.addStage(stage);
-      stage.postStart();
-    }
-  }
-
-  private void shutdown() {
-    // Do it in a signal, this ensures that if shutdown happens while something is iterating through
-    // the ports, we don't get a concurrent modification exception.
-    builtGraph.enqueueSignal(() -> {
-      builtGraph.removeStages(subStages);
-      builtGraph.removePorts(subStagePorts);
-    });
   }
 
   @Override
@@ -64,6 +41,7 @@ final class SubStageInlet<T> implements StageInlet<T> {
   @Override
   public void cancel() {
     delegate.cancel();
+    shutdown();
   }
 
   @Override

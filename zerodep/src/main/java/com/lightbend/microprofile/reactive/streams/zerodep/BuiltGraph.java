@@ -80,14 +80,21 @@ class BuiltGraph implements Executor {
    * Build a sub stage inlet.
    */
   <T> SubStageInlet<T> buildSubInlet(Graph graph) {
-    return new GraphBuilder(this).buildGraph(graph, Shape.INLET).inlet();
+    return new GraphBuilder(this).buildGraph(graph, Shape.INLET).subInlet();
+  }
+
+  /**
+   * Build a sub stage outlet.
+   */
+  <T> SubStageOutlet<T> buildSubOutlet(Graph graph) {
+    return new GraphBuilder(this).buildGraph(graph, Shape.OUTLET).subOutlet();
   }
 
   /**
    * Used to indicate the shape of the graph we're building.
    */
   enum Shape {
-    PUBLISHER(false, true), SUBSCRIBER(true, false), PROCESSOR(true, true), CLOSED(false, false), INLET(false, true);
+    PUBLISHER(false, true), SUBSCRIBER(true, false), PROCESSOR(true, true), CLOSED(false, false), INLET(false, true), OUTLET(true, false);
 
     private final boolean hasInlet;
     private final boolean hasOutlet;
