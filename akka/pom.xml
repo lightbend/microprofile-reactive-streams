@@ -9,7 +9,7 @@
     <parent>
         <groupId>com.lightbend.microprofile.reactive.streams</groupId>
         <artifactId>lightbend-microprofile-reactive-streams-parent</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
+        <version>1.0.0</version>
     </parent>
 
     <artifactId>lightbend-microprofile-reactive-streams-akka</artifactId>
