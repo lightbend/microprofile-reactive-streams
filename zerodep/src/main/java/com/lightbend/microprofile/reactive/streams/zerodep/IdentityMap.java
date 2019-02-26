@@ -3,7 +3,7 @@
  */
 package com.lightbend.microprofile.reactive.streams.zerodep;
 
-import org.eclipse.microprofile.reactive.streams.spi.Stage;
+import org.eclipse.microprofile.reactive.streams.operators.spi.Stage;
 
 import java.util.function.Function;
 

@@ -3,7 +3,7 @@
  */
 package com.lightbend.microprofile.reactive.streams.zerodep;
 
-import org.eclipse.microprofile.reactive.streams.spi.SubscriberWithCompletionStage;
+import org.eclipse.microprofile.reactive.streams.operators.spi.SubscriberWithCompletionStage;
 import org.reactivestreams.Subscriber;
 
 import java.util.concurrent.CompletionStage;

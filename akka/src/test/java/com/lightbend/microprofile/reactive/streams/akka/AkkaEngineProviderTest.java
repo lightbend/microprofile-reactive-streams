@@ -10,7 +10,7 @@ import akka.stream.ActorMaterializer;
 import akka.stream.javadsl.AsPublisher;
 import akka.stream.javadsl.Sink;
 import akka.stream.javadsl.Source;
-import org.eclipse.microprofile.reactive.streams.ReactiveStreams;
+import org.eclipse.microprofile.reactive.streams.operators.ReactiveStreams;
 import org.testng.annotations.Test;
 import org.reactivestreams.Publisher;
 import scala.compat.java8.FutureConverters;

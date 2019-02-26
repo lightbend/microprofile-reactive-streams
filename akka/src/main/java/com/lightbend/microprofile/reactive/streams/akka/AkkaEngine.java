@@ -10,8 +10,8 @@ import akka.stream.Attributes;
 import akka.stream.Materializer;
 import akka.stream.SourceShape;
 import akka.stream.javadsl.*;
-import org.eclipse.microprofile.reactive.streams.*;
-import org.eclipse.microprofile.reactive.streams.spi.*;
+import org.eclipse.microprofile.reactive.streams.operators.*;
+import org.eclipse.microprofile.reactive.streams.operators.spi.*;
 import org.reactivestreams.Processor;
 import org.reactivestreams.Publisher;
 

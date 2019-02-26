@@ -19,8 +19,8 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
 
-        <microprofile.reactive.streams.version>1.0-RC3</microprofile.reactive.streams.version>
-        <akka.version>2.5.14</akka.version>
+        <microprofile-reactive-streams.version>1.0</microprofile-reactive-streams.version>
+        <akka.version>2.5.19</akka.version>
     </properties>
 
     <licenses>
@@ -66,19 +66,19 @@
     <dependencyManagement>
         <dependencies>
             <dependency>
-                <groupId>org.eclipse.microprofile.reactive.streams</groupId>
-                <artifactId>microprofile-reactive-streams-operators</artifactId>
-                <version>${microprofile.reactive.streams.version}</version>
+                <groupId>org.eclipse.microprofile.reactive-streams-operators</groupId>
+                <artifactId>microprofile-reactive-streams-operators-api</artifactId>
+                <version>${microprofile-reactive-streams.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.eclipse.microprofile.reactive.streams</groupId>
+                <groupId>org.eclipse.microprofile.reactive-streams-operators</groupId>
                 <artifactId>microprofile-reactive-streams-operators-core</artifactId>
-                <version>${microprofile.reactive.streams.version}</version>
+                <version>${microprofile-reactive-streams.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.eclipse.microprofile.reactive.streams</groupId>
+                <groupId>org.eclipse.microprofile.reactive-streams-operators</groupId>
                 <artifactId>microprofile-reactive-streams-operators-tck</artifactId>
-                <version>${microprofile.reactive.streams.version}</version>
+                <version>${microprofile-reactive-streams.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.typesafe.akka</groupId>

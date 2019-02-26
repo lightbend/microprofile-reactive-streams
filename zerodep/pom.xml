@@ -17,11 +17,11 @@
     <description>Lightbend MicroProfile Reactive Streams Operators :: Zero Dependency Provider</description>
     <dependencies>
         <dependency>
-            <groupId>org.eclipse.microprofile.reactive.streams</groupId>
+            <groupId>org.eclipse.microprofile.reactive-streams-operators</groupId>
             <artifactId>microprofile-reactive-streams-operators-core</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.eclipse.microprofile.reactive.streams</groupId>
+            <groupId>org.eclipse.microprofile.reactive-streams-operators</groupId>
             <artifactId>microprofile-reactive-streams-operators-tck</artifactId>
             <scope>test</scope>
         </dependency>
